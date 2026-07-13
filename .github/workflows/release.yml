@@ -1,0 +1,51 @@
+name: Release
+
+# Tag-driven releases — the same pattern as n8n-nodes-socialmate. Pushing a
+# `v*` tag runs the test suite and publishes THAT EXACT version to npm (with
+# provenance) plus the matching GitHub Release. The tag names the version.
+# Pushing commits to `main` publishes NOTHING.
+#
+# Cut a release from a clean main:
+#   npm run release:patch   # or release:minor / release:major
+# (bumps package.json, commits, creates vX.Y.Z, pushes commit + tag)
+#
+# One-time setup: an npm Automation token in the NPM_TOKEN repo secret.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm provenance via OIDC
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so release notes can diff against prior tags
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npm test # gate the publish on the unit + packaging + contract-drift suite
+      # Pin package.json to the pushed tag (vX.Y.Z -> X.Y.Z). The tag is the
+      # single source of truth; --allow-same-version makes this a no-op when the
+      # tagged commit already carries the bump (the `npm version` flow).
+      - name: Set version from tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
