@@ -14,17 +14,32 @@
  *     "mcpServers": {
  *       "socialmate": {
  *         "command": "npx",
- *         "args": ["socialmate-mcp"],
+ *         "args": ["-y", "socialmate-mcp"],
  *         "env": {
- *           "SOCIALMATE_API_KEY": "sm_live_xxx",
+ *           "SOCIALMATE_API_KEY": "sm_paste_your_api_key_here",
  *           "SOCIALMATE_BASE_URL": "http://127.0.0.1:3456"
  *         }
  *       }
  *     }
  *   }
  *
- * Get an API key in the SocialMate app → API & Integrations. The key's scope
- * (read / send / admin) and your license tier decide which tools actually work.
+ * …or, for Claude Code:
+ *
+ *   claude mcp add socialmate \
+ *     --env SOCIALMATE_API_KEY=sm_paste_your_api_key_here \
+ *     --env SOCIALMATE_BASE_URL=http://127.0.0.1:3456 \
+ *     -- npx -y socialmate-mcp
+ *
+ * Keep the `-y`: without it npx can stop to ask you to confirm the install, inside
+ * a stdio client where there is no terminal to answer it — so the server never starts.
+ *
+ * Two prerequisites, in this order:
+ *   1. The app's **local API server must be switched on** — it is OFF by default
+ *      (SocialMate → API & Integrations). Everything below talks to it over loopback;
+ *      if it isn't running you get a clean tool list and every call fails.
+ *   2. An **API key** (API & Integrations → API Keys). A real key is `sm_<base64url>` —
+ *      there is no `sk-`/`sk_` prefix and no `_live_` segment in this product. The key's
+ *      scope (read / send / admin) and your license tier decide which tools actually work.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

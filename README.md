@@ -34,26 +34,29 @@ photos people send**, remember who it's talking to and what media said, and chec
 
 ## Requirements
 
-- **SocialMate running**, with its local API server on — either the **desktop app**
-  (**API & Integrations**) or a **headless VPS/Docker** install. Point `SOCIALMATE_BASE_URL` at
-  whichever you run; the tools are identical.
-- An **API key** from the app (**API & Integrations → new key**). Its scope (read / send / admin)
-  and your license tier decide which tools work.
-- **Node.js ≥ 18.17** (only to run `npx`; nothing to install globally).
+- **SocialMate running** — either the **desktop app** or a **headless VPS/Docker** install. Point
+  `SOCIALMATE_BASE_URL` at whichever you run; the tools are identical.
+- **Its local API server switched on.** ⚠️ It is **off by default** — turn it on in
+  **API & Integrations**. This is the single most common reason the tools don't show up: the MCP
+  server starts fine, then has nothing to talk to.
+- An **API key** from the app (**API & Integrations → API Keys → new key**). Its scope
+  (read / send / admin) and your license tier decide which tools work.
+- **Node.js ≥ 18.17** (only to run `npx` — there is nothing to install globally; `npx` fetches this
+  package on first run).
 
-## Quickstart — Claude Desktop
+## Quickstart — Claude Desktop, Cursor, Cline
 
-Add SocialMate to your `claude_desktop_config.json` (the app shows a copy-paste snippet under
-**API & Integrations → MCP**):
+Add SocialMate to your `claude_desktop_config.json` (the app shows this snippet, with your real URL
+already filled in, under **API & Integrations → MCP**):
 
 ```json
 {
   "mcpServers": {
     "socialmate": {
       "command": "npx",
-      "args": ["socialmate-mcp"],
+      "args": ["-y", "socialmate-mcp"],
       "env": {
-        "SOCIALMATE_API_KEY": "sm_aB3xK9p2QrT5wYz0vN8mLk",
+        "SOCIALMATE_API_KEY": "sm_paste_your_api_key_here",
         "SOCIALMATE_BASE_URL": "http://127.0.0.1:3456"
       }
     }
@@ -63,6 +66,24 @@ Add SocialMate to your `claude_desktop_config.json` (the app shows a copy-paste 
 
 Restart Claude Desktop and the WhatsApp tools appear. **Cursor, Cline, Goose** and any other MCP
 client use the same `command` / `args` / `env` — drop it into their MCP config the same way.
+
+> Keep the **`-y`**. Without it `npx` can stop to ask you to confirm the install — inside a stdio MCP
+> client, where there is no terminal to answer it, so the server just never starts.
+
+## Quickstart — Claude Code
+
+Same server, one command:
+
+```bash
+claude mcp add socialmate \
+  --env SOCIALMATE_API_KEY=sm_paste_your_api_key_here \
+  --env SOCIALMATE_BASE_URL=http://127.0.0.1:3456 \
+  -- npx -y socialmate-mcp
+```
+
+Then `claude mcp list` to confirm it connected. Ask it to call `whatsapp_get_capabilities` first —
+that tells the agent its tier, scope and feature flags, so it knows what it's allowed to do before
+it tries.
 
 ### Environment variables
 
@@ -205,7 +226,7 @@ adapt (e.g. fall back to a plain text send).
 Browse and call every tool interactively with the MCP Inspector:
 
 ```bash
-npx @modelcontextprotocol/inspector npx socialmate-mcp
+npx @modelcontextprotocol/inspector npx -y socialmate-mcp
 ```
 
 Run the test suite (spawns the server against a mock REST API and drives it over MCP):
