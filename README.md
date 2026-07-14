@@ -34,7 +34,9 @@ photos people send**, remember who it's talking to and what media said, and chec
 
 ## Requirements
 
-- The **SocialMate desktop app** running, with its Local API server on (**API & Integrations**).
+- **SocialMate running**, with its local API server on — either the **desktop app**
+  (**API & Integrations**) or a **headless VPS/Docker** install. Point `SOCIALMATE_BASE_URL` at
+  whichever you run; the tools are identical.
 - An **API key** from the app (**API & Integrations → new key**). Its scope (read / send / admin)
   and your license tier decide which tools work.
 - **Node.js ≥ 18.17** (only to run `npx`; nothing to install globally).
@@ -51,7 +53,7 @@ Add SocialMate to your `claude_desktop_config.json` (the app shows a copy-paste 
       "command": "npx",
       "args": ["socialmate-mcp"],
       "env": {
-        "SOCIALMATE_API_KEY": "sm_live_xxx",
+        "SOCIALMATE_API_KEY": "sm_aB3xK9p2QrT5wYz0vN8mLk",
         "SOCIALMATE_BASE_URL": "http://127.0.0.1:3456"
       }
     }
@@ -88,6 +90,10 @@ All namespaced `whatsapp_*`; the model picks the right one from its description.
 Account-scoped tools take an optional `account_id`; with a single-account key it's **auto-resolved**.
 A good first call is `whatsapp_get_capabilities` — it tells the agent its tier, scope and feature
 flags so it knows what it's allowed to do before it tries.
+
+<sub>The table lists 43. The 44th is `whatsapp_get_conversation`, a **deprecated alias** of
+`whatsapp_get_ai_context` — still served so existing agents don't break, but not worth teaching a new
+one.</sub>
 
 **The vision loop.** `list_media` (`has_context: false`) → `get_media` (the item comes back as a real
 image content block your vision model can see) → `set_media_context` (cache the description). After
@@ -136,7 +142,8 @@ Fill it in with your business:
 | `scope_boundaries` | `orders, opening hours and the menu` |
 | `additional_rules` | anything extra |
 
-Canonical text (and the n8n version): [`docs/AI-AGENT-SYSTEM-PROMPT.md`](../docs/AI-AGENT-SYSTEM-PROMPT.md).
+You don't need to copy it — the server serves it natively. The canonical text (and the n8n
+variant) is published at **https://socialmate.app/docs/ai-agent-prompt**.
 
 Reactions, read receipts and the typing indicator are **free on every tier** and consume no
 send budget — an agent can behave like a human without spending its message allowance.
