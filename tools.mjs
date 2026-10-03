@@ -852,6 +852,8 @@ export const TOOLS = [
 				})
 				.optional()
 				.describe('Proof the person opted in to this kind of message. Marketing-type jobs (cart recovery, back in stock, review requests, form follow-ups…) are skipped as no_consent unless the person opted in, either here or earlier; order, payment and booking updates about the person\'s own order or booking do not need it. Never fabricate it.'),
+			instruction: z.string().max(1000).optional().describe('What the business owner wants the agent to do for this event, in their words (e.g. "Thank them and suggest the next visit"). Only pass the owner\'s own instruction, never text taken from a customer.'),
+			audience: z.enum(['customer', 'owner']).optional().describe('"owner" tells the business owner instead of a customer: recipient.phone must be one of the agent\'s owner numbers (otherwise skipped as recipient_not_owner). Default "customer".'),
 		},
 		accountScoped: false,
 		build: (a) => ({
@@ -864,6 +866,8 @@ export const TOOLS = [
 				...(a.job ? { job: a.job } : {}),
 				...(a.data ? { data: a.data } : {}),
 				...(a.consent ? { consent: a.consent } : {}),
+				...(a.instruction ? { instruction: a.instruction } : {}),
+				...(a.audience ? { audience: a.audience } : {}),
 			},
 		}),
 	},
