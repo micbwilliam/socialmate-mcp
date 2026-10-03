@@ -1015,6 +1015,10 @@
         "mode": "reactive"
       },
       {
+        "id": "csat",
+        "mode": "reactive"
+      },
+      {
         "id": "after_hours",
         "mode": "reactive"
       },
@@ -1091,7 +1095,19 @@
       "contact-memory",
       "mcp-connectors",
       "wordpress-connector",
-      "usage-and-cost-limits"
+      "usage-and-cost-limits",
+      "follow-ups",
+      "lead-capture",
+      "contact-cards",
+      "named-handoff",
+      "csat",
+      "chat-summaries",
+      "knowledge-import",
+      "web-search",
+      "mcp-oauth",
+      "mcp-local-servers",
+      "voice-notes",
+      "photos"
     ]
   },
   "deployment": {
