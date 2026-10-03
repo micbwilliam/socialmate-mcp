@@ -86,6 +86,14 @@ function startMock() {
 			}
 			if (req.method === 'DELETE' && path === '/v1/queue/batches/batch_1') return send(200, { data: { success: true, cancelled: 3 } });
 			if (req.method === 'POST' && path === '/v1/queue/batches/batch_1/retry') return send(200, { data: { success: true, retried: 2 } });
+			// SocialMate's own agent — echo what each tool built so the test can prove
+			// the REST names (idempotencyKey, decision, range) are mapped correctly.
+			if (req.method === 'GET' && path === '/v1/agents/ag_1/usage') return send(200, { data: { range: query.range ?? null, totals: { replies: 4 } } });
+			if (req.method === 'POST' && path === '/v1/agents/ag_1/events') return send(202, { data: { status: 'queued', eventId: 'ev_1', echo: chunks ? JSON.parse(chunks) : {} } });
+			if (req.method === 'POST' && path === '/v1/agents/ag_1/approvals/ap_1') return send(200, { data: { ok: true, message: 'Approved and sent.', echo: chunks ? JSON.parse(chunks) : {} } });
+			// An approval someone already decided: the app's real 409 shape, which is NOT "account not connected".
+			if (req.method === 'POST' && path === '/v1/agents/ag_1/approvals/ap_done') return send(409, { error: { code: 'conflict', message: 'Already approved.' } });
+			if (req.method === 'POST' && path === '/v1/agents/ag_1/chats/15551234567%40s.whatsapp.net/reply') return send(200, { data: { ok: true, echo: chunks ? JSON.parse(chunks) : {} } });
 			return send(404, { error: { code: 'not_found', message: `no mock for ${req.method} ${path}` } });
 		});
 	});
@@ -114,7 +122,7 @@ test('socialmate-mcp end to end', async () => {
 
 	// tools/list
 	const { tools } = await client.listTools();
-	assert.equal(tools.length, 44, 'exposes the full tool catalog');
+	assert.equal(tools.length, 59, 'exposes the full tool catalog');
 	assert.ok(tools.every((t) => t.name.startsWith('whatsapp_')), 'tools are namespaced');
 	assert.ok(tools.every((t) => t.description.length > 80), 'every tool has an agent-grade description');
 	// the memory tool is discoverable under the clear name AND the deprecated alias
@@ -242,6 +250,27 @@ test('socialmate-mcp end to end', async () => {
 	assert.ok(disabled.isError, 'a disabled bulk import surfaces as a tool error');
 	assert.match(JSON.stringify(disabled), /Batch sending is turned off/, 'the server’s own instruction reaches the agent');
 	assert.doesNotMatch(JSON.stringify(disabled), /scope/, 'a 403 product gate is not mistaken for a missing API-key scope');
+
+	// SocialMate's own WhatsApp agent (Pro) — supervision tools build the right requests.
+	const usage = await client.callTool({ name: 'whatsapp_agent_usage', arguments: { agent_id: 'ag_1', range: '30d' } });
+	assert.equal(payload(usage).range, '30d', 'usage forwards ?range');
+	const ev = await client.callTool({
+		name: 'whatsapp_agent_send_event',
+		arguments: { agent_id: 'ag_1', type: 'order.shipped', idempotency_key: 'order-1042-shipped', recipient: { phone: '+201234567890', name: 'Mona' }, data: { order_number: '1042' } },
+	});
+	assert.deepEqual(
+		payload(ev).echo,
+		{ type: 'order.shipped', idempotencyKey: 'order-1042-shipped', recipient: { phone: '+201234567890', name: 'Mona' }, data: { order_number: '1042' } },
+		'event body uses the REST names and omits unset fields',
+	);
+	assert.equal(payload(ev).status, 'queued', 'a 202 queued answer is a success');
+	const decided = await client.callTool({ name: 'whatsapp_agent_decide_approval', arguments: { agent_id: 'ag_1', approval_id: 'ap_1', decision: 'approve', note: 'ok by owner' } });
+	assert.deepEqual(payload(decided).echo, { decision: 'approve', note: 'ok by owner' }, 'decision body shape');
+	const late = await client.callTool({ name: 'whatsapp_agent_decide_approval', arguments: { agent_id: 'ag_1', approval_id: 'ap_done', decision: 'reject' } });
+	assert.equal(late.isError, true, 'an already-decided approval is a tool error');
+	assert.equal(late.content[0].text, 'Already approved.', 'an agent-route 409 passes the server message through instead of "not connected"');
+	const human = await client.callTool({ name: 'whatsapp_agent_reply', arguments: { agent_id: 'ag_1', chat_id: '15551234567@s.whatsapp.net', text: 'Hi, Michael here' } });
+	assert.deepEqual(payload(human).echo, { text: 'Hi, Michael here' }, 'human reply body; the JID is URL-encoded into the path');
 
 	const cancelledBatch = await client.callTool({ name: 'whatsapp_cancel_batch', arguments: { batch_id: 'batch_1' } });
 	assert.equal(payload(cancelledBatch).cancelled, 3, 'cancel_batch stops everything still pending');

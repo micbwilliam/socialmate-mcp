@@ -39,6 +39,14 @@ const targetMessageId = z
 	.string()
 	.describe('Id of the target message (from whatsapp_fetch_new_messages, whatsapp_search_messages, or a previous send result).');
 
+const agentIdArg = z.string().describe('The id of one of SocialMate\'s own WhatsApp agents (from whatsapp_agent_list).');
+
+const agentChatId = z
+	.string()
+	.describe(
+		'The chat\'s full WhatsApp id (JID) exactly as SocialMate reports it — the `chatId` from whatsapp_agent_list_handoffs or whatsapp_agent_list_approvals, or a chat `id` from whatsapp_list_chats. Not a bare phone number: the agent\'s per-chat state is keyed on this exact id.',
+	);
+
 /**
  * `binary: true` marks a tool whose endpoint answers with bytes, not JSON — the
  * result is returned to the client as an MCP image content block so a vision
@@ -691,5 +699,203 @@ export const TOOLS = [
 		inputSchema: {},
 		accountScoped: false,
 		build: () => ({ method: 'GET', path: '/v1/capabilities' }),
+	},
+
+	// ── SocialMate's own WhatsApp agent (Pro, `aiEnabled`) ─────────────────────
+	// These tools supervise the native agent that runs INSIDE the SocialMate app
+	// (one per WhatsApp number). They do not make the calling model a WhatsApp
+	// agent — the app's agent reads and replies on its own. Creating an agent and
+	// its configuration (provider, keys, persona, jobs, senses) stay in the app.
+	{
+		name: 'whatsapp_agent_list',
+		description:
+			'Lists SocialMate\'s own WhatsApp agents (one per WhatsApp number, configured in the SocialMate app) as an array of { id, accountId, accountLabel, name, status, autonomy, model, providerId, provider{kind,label}, today{conversations, replies, tokens, costUsd}, openHandoffs, pendingApprovals }. `status` is "draft" (never activated), "active", "paused" or "error". Call this first to get the agent_id every other whatsapp_agent_* tool needs, and to see at a glance whether anything is waiting on a person (openHandoffs / pendingApprovals). An API key scoped to some accounts only sees the agents on those accounts. These are the app\'s built-in agents, not you; an empty array means none has been set up in the app yet. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: {},
+		accountScoped: false,
+		build: () => ({ method: 'GET', path: '/v1/agents' }),
+	},
+	{
+		name: 'whatsapp_agent_get',
+		description:
+			'Returns the full configuration of one of SocialMate\'s own WhatsApp agents: its name, status, autonomy, purpose and custom instructions, persona, enabled jobs, tool policies, delivery, escalation, budget and senses settings, owner numbers, model and fallback model, provider (kind and label only — never keys), configVersion, and the catalog of available jobs (jobCatalog). Use it to understand how the agent is set up before deciding on an approval or a hand-off. It is read-only: changing the configuration is done in the SocialMate app. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: { agent_id: agentIdArg },
+		accountScoped: false,
+		build: (a) => ({ method: 'GET', path: `/v1/agents/${encodeURIComponent(a.agent_id)}` }),
+	},
+	{
+		name: 'whatsapp_agent_pause',
+		description:
+			'Pauses one of SocialMate\'s own WhatsApp agents: it stops answering on that number until whatsapp_agent_resume. Returns the agent summary (same shape as whatsapp_agent_list) with status "paused". Nothing is deleted, and the number itself keeps working — people can still message it and a person can still reply. Emits the `agent.paused` webhook. Use this when the agent is getting things wrong and a person should take over everywhere; to silence it in a single chat, use whatsapp_agent_take_over instead. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: { agent_id: agentIdArg },
+		accountScoped: false,
+		build: (a) => ({ method: 'POST', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/pause` }),
+	},
+	{
+		name: 'whatsapp_agent_resume',
+		description:
+			'Resumes a paused SocialMate WhatsApp agent so it answers on its number again. Returns the agent summary with status "active". Fails with "Choose an AI provider and model in SocialMate first." if the agent has no provider/model yet — that is set up in the SocialMate app, not here. It only lifts this agent\'s own pause: if every agent is switched off in the app (the global kill switch), it still stays quiet. Emits the `agent.resumed` webhook. Confirm with the user before resuming an agent someone else paused. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: { agent_id: agentIdArg },
+		accountScoped: false,
+		build: (a) => ({ method: 'POST', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/resume` }),
+	},
+	{
+		name: 'whatsapp_agent_usage',
+		description:
+			'Returns one SocialMate agent\'s usage over a range: { range, totals{runs, conversations, replies, escalations, tokens, inputTokens, outputTokens, cacheReadTokens, costUsd, resolutionRate, p50LatencyMs, p95LatencyMs}, daily[], byModel[], byTool[], monthCostUsd }. `costUsd` is computed from SocialMate\'s own model price catalog — an estimate of what the AI provider bills the user, not an invoice. `range` is "today", "7d" (default), "14d", "30d" or "90d". For all agents at once, use whatsapp_agent_usage_summary. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			range: z.enum(['today', '7d', '14d', '30d', '90d']).optional().describe('The period to report. Defaults to 7d.'),
+		},
+		accountScoped: false,
+		build: (a) => ({ method: 'GET', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/usage`, ...(a.range ? { qs: { range: a.range } } : {}) }),
+	},
+	{
+		name: 'whatsapp_agent_usage_summary',
+		description:
+			'Returns usage across every SocialMate agent the API key can see: { agents, today{conversations, replies, tokens, costUsd, escalations}, monthCostUsd, daily[{day, conversations, replies, escalations, tokens, costUsd}] } — `daily` covers the last 14 days. Costs are estimates from SocialMate\'s own price catalog. Use it for a quick "how much did the agents do and spend" answer; drill into one agent with whatsapp_agent_usage. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: {},
+		accountScoped: false,
+		build: () => ({ method: 'GET', path: '/v1/usage/summary' }),
+	},
+	{
+		name: 'whatsapp_agent_list_approvals',
+		description:
+			'Lists the actions one of SocialMate\'s own agents is holding for a person to approve — replies or steps it was not allowed to take on its own under its autonomy setting. Each is { id, agentId, runId, chatId, contactPhone, kind ("act" | "draft" | "connector_intent"), summary, preview, payload, status, decidedBy, createdAt, decidedAt, expiresAt } (times in epoch ms). By default only "pending" items; pass status "all" to include approved, rejected and expired ones. Read `summary` and `preview` before deciding with whatsapp_agent_decide_approval. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			status: z.enum(['pending', 'all']).optional().describe('"pending" (default) or "all".'),
+		},
+		accountScoped: false,
+		build: (a) => ({ method: 'GET', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/approvals`, ...(a.status === 'all' ? { qs: { status: 'all' } } : {}) }),
+	},
+	{
+		name: 'whatsapp_agent_decide_approval',
+		description:
+			'Approves or rejects one action SocialMate\'s own agent is holding (from whatsapp_agent_list_approvals). Approving a held reply SENDS it to the customer on WhatsApp right away, through the anti-ban engine; approving a held website step (kind "connector_intent") carries it out on the connected site; rejecting discards it. Returns { ok, message } — e.g. "Approved and sent.", or a note that some part could not be sent. It fails with "Already approved." / "Already rejected." if someone decided it first. This is a decision on a real customer conversation: only approve what the user has actually agreed to — never approve to clear the list. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			approval_id: z.string().describe('The approval id (from whatsapp_agent_list_approvals).'),
+			decision: z.enum(['approve', 'reject']).describe('"approve" carries the action out; "reject" discards it.'),
+			note: z.string().max(500).optional().describe('Optional note recorded with the decision (up to 500 characters).'),
+		},
+		accountScoped: false,
+		build: (a) => ({
+			method: 'POST',
+			path: `/v1/agents/${encodeURIComponent(a.agent_id)}/approvals/${encodeURIComponent(a.approval_id)}`,
+			body: { decision: a.decision, ...(a.note ? { note: a.note } : {}) },
+		}),
+	},
+	{
+		name: 'whatsapp_agent_list_handoffs',
+		description:
+			'Lists the chats one of SocialMate\'s own agents handed to a person — because it was asked for a human, could not answer, hit its budget, or someone took the chat over. Each is { id, agentId, accountId, chatId, contactName, contactPhone, reason, trigger, status ("open" | "claimed" | "resolved"), openedAt, resolvedAt } (epoch ms). By default only open ones; pass status "all" for the history. While a chat is handed off the agent stays quiet there; answer the person with whatsapp_agent_reply, and give the chat back with whatsapp_agent_release once it is dealt with. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			status: z.enum(['open', 'all']).optional().describe('"open" (default) or "all".'),
+		},
+		accountScoped: false,
+		build: (a) => ({ method: 'GET', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/handoffs`, ...(a.status === 'all' ? { qs: { status: 'all' } } : {}) }),
+	},
+	{
+		name: 'whatsapp_agent_take_over',
+		description:
+			'Takes one chat away from SocialMate\'s own agent so a person can handle it: the agent stops replying in that chat (any reply it was about to send is cancelled) until whatsapp_agent_release. Returns { ok: true }. It opens a hand-off marked "Taken over by a person" and sends nothing to the customer. Other chats are unaffected; to stop the agent everywhere use whatsapp_agent_pause. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: { agent_id: agentIdArg, chat_id: agentChatId },
+		accountScoped: false,
+		build: (a) => ({ method: 'POST', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/chats/${encodeURIComponent(a.chat_id)}/takeover` }),
+	},
+	{
+		name: 'whatsapp_agent_release',
+		description:
+			'Gives a chat back to SocialMate\'s own agent after a person handled it: the chat\'s open hand-offs are resolved and the agent answers there again from the next message on. Returns { ok: true }. It sends nothing by itself. Only release once the person\'s issue is actually dealt with, or the agent picks the conversation up mid-problem. Emits `agent.handoff_resolved` when a hand-off was open. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: { agent_id: agentIdArg, chat_id: agentChatId },
+		accountScoped: false,
+		build: (a) => ({ method: 'POST', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/chats/${encodeURIComponent(a.chat_id)}/release` }),
+	},
+	{
+		name: 'whatsapp_agent_reply',
+		description:
+			'Sends a reply in one chat as the person running the business — not as the agent — and keeps SocialMate\'s own agent out of that chat: it takes the chat over first (as whatsapp_agent_take_over does), then sends the text through the anti-ban engine. Returns { ok: true } once the text is handed to WhatsApp, which is not proof it arrived. Use this to answer a handed-off customer; afterwards the agent stays quiet in that chat until whatsapp_agent_release. Only send what the user actually wants said in their name. To message a chat with no agent involved, use whatsapp_send_message. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			chat_id: agentChatId,
+			text: z.string().min(1).max(4000).describe('The reply text (1–4000 characters).'),
+		},
+		accountScoped: false,
+		build: (a) => ({ method: 'POST', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/chats/${encodeURIComponent(a.chat_id)}/reply`, body: { text: a.text } }),
+	},
+	{
+		name: 'whatsapp_agent_send_event',
+		description:
+			'Hands a business event to SocialMate\'s own agent so it starts the matching job with one customer — e.g. an order update ("order.created", "order.paid", "order.shipped", "order.status_changed"), a booking reminder ("booking.created", "booking.reminder"), a form follow-up ("form.submitted"), cart recovery ("cart.abandoned") or back-in-stock ("stock.back_in"). The agent writes and sends the message itself. Returns { status: "queued" | "duplicate" | "skipped", reason?, eventId? }; read `status` — "skipped" is common and correct: the agent is paused, no enabled job handles that event type, the person opted out, a marketing-type job has no consent, the frequency cap (2 per 12 h per job) was hit, the chat is handed to a person, or the recipient is a group (never allowed). The recipient must come from the caller\'s own record of a real customer (an order, a booking, a form submission) — never invent, guess or look up a number to message. Reuse the same idempotency_key for the same real-world event so a retry is a "duplicate", not a second message. Requires SocialMate Pro (AI agents) and an API key with the `send` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			type: z.string().min(1).max(64).describe('The event type, e.g. "order.shipped", "booking.reminder", "cart.abandoned".'),
+			idempotency_key: z
+				.string()
+				.min(8)
+				.max(200)
+				.describe('A stable key for this real-world event (8–200 characters), e.g. "order-1042-shipped". Sending the same key again is reported as a duplicate and sends nothing.'),
+			recipient: z
+				.object({
+					phone: z.string().min(7).max(24).describe('The customer\'s phone in full international format with country code, taken from the caller\'s own record.'),
+					name: z.string().max(80).optional().describe('The customer\'s name, if known.'),
+					locale: z.string().max(20).optional().describe('The customer\'s language/locale, e.g. "en" or "ar-EG".'),
+				})
+				.describe('Who the event is about — one individual customer (groups are refused).'),
+			job: z.string().max(64).optional().describe('Force a specific enabled event job (e.g. "order_update"); omit to let the event type pick it.'),
+			data: z.record(z.unknown()).optional().describe('Event details the agent can use in the message, e.g. { "order_number": "1042", "tracking_url": "…" }.'),
+			consent: z
+				.object({
+					source: z.string().max(200).describe('Where the person opted in, e.g. "checkout checkbox".'),
+					at: z.number().describe('When they opted in, epoch ms.'),
+				})
+				.optional()
+				.describe('Proof the person opted in to this kind of message. Marketing-type jobs (cart recovery, back in stock, review requests, form follow-ups…) are skipped as no_consent unless the person opted in, either here or earlier; order, payment and booking updates about the person\'s own order or booking do not need it. Never fabricate it.'),
+		},
+		accountScoped: false,
+		build: (a) => ({
+			method: 'POST',
+			path: `/v1/agents/${encodeURIComponent(a.agent_id)}/events`,
+			body: {
+				type: a.type,
+				idempotencyKey: a.idempotency_key,
+				recipient: a.recipient,
+				...(a.job ? { job: a.job } : {}),
+				...(a.data ? { data: a.data } : {}),
+				...(a.consent ? { consent: a.consent } : {}),
+			},
+		}),
+	},
+	{
+		name: 'whatsapp_agent_list_knowledge',
+		description:
+			'Lists the knowledge one of SocialMate\'s own agents answers from — its own items plus the items shared across the account: [{ id, agentId (null = shared), kind ("text" | "qa" | "file" | "url" | "example"), title, content, tokens, createdAt, updatedAt }]. Check it before adding something, so you do not add a duplicate or a contradiction. Requires SocialMate Pro (AI agents) and an API key with the `read` scope.',
+		inputSchema: { agent_id: agentIdArg },
+		accountScoped: false,
+		build: (a) => ({ method: 'GET', path: `/v1/agents/${encodeURIComponent(a.agent_id)}/knowledge` }),
+	},
+	{
+		name: 'whatsapp_agent_add_knowledge',
+		description:
+			'Adds one knowledge item that SocialMate\'s own agent will answer customers from — prices, policies, opening hours, a question with its answer, or an example reply. Returns the stored item { id, agentId, kind, title, content, tokens, createdAt, updatedAt }. `kind` is "text" (default), "qa", "url" or "example"; a "url" item stores the text you give as `content` — SocialMate does not fetch the page. `shared: true` makes it available to every agent on that account. The agent will repeat it to real customers, so add only facts the user has confirmed; check whatsapp_agent_list_knowledge first to avoid duplicates. Removing an item is done in the SocialMate app. Requires SocialMate Pro (AI agents) and an API key with the `admin` scope.',
+		inputSchema: {
+			agent_id: agentIdArg,
+			content: z.string().min(1).max(200000).describe('The knowledge itself (up to 200,000 characters).'),
+			title: z.string().max(200).optional().describe('Optional short title.'),
+			kind: z.enum(['text', 'qa', 'url', 'example']).optional().describe('The kind of item. Defaults to "text".'),
+			shared: z.boolean().optional().describe('true = share with every agent on this account; default false = this agent only.'),
+		},
+		accountScoped: false,
+		build: (a) => ({
+			method: 'POST',
+			path: `/v1/agents/${encodeURIComponent(a.agent_id)}/knowledge`,
+			body: {
+				content: a.content,
+				...(a.title ? { title: a.title } : {}),
+				...(a.kind ? { kind: a.kind } : {}),
+				...(a.shared !== undefined ? { shared: a.shared } : {}),
+			},
+		}),
 	},
 ];

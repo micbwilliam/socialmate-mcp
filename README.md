@@ -18,10 +18,12 @@ A native **[Model Context Protocol](https://modelcontextprotocol.io)** server fo
 or headless on your own VPS/Docker, managed from a browser at `/admin`). Point
 **Claude Desktop, Cursor, Cline** or any MCP client at it and your agent can send and read WhatsApp
 messages, look up contacts, manage groups, queue a paced batch of personalised messages, recall whole conversations, **look at the
-photos people send**, remember who it's talking to and what media said, and check anti-ban headroom —
-**44 tools**, all on your own machine and your own number.
+photos people send**, remember who it's talking to and what media said, check anti-ban headroom, and
+supervise SocialMate's own WhatsApp agent (Pro) —
+**59 tools**, all on your own machine and your own number.
 
-> **SocialMate doesn't contain an AI — it gives *your* AI a WhatsApp.** This server is a thin
+> **This server doesn't add an AI — it gives *your* AI a WhatsApp.** (SocialMate Pro also has its own
+> built-in WhatsApp agent; the `whatsapp_agent_*` tools let yours supervise it.) This server is a thin
 > translator over SocialMate's local REST API: every tool call runs through the app's real
 > **auth → scope → tier-gate → anti-ban → audit** pipeline, so nothing here can bypass a limit and
 > the app stays the single source of truth.
@@ -92,7 +94,7 @@ it tries.
 | `SOCIALMATE_API_KEY` | ✅ | — | An API key from the app → API & Integrations. |
 | `SOCIALMATE_BASE_URL` | | `http://127.0.0.1:3456` | The app's API — a desktop app or a headless VPS. Use your **Pro named tunnel** host to drive WhatsApp from a remote agent. On a VPS (a datacenter IP) you can route an account through your own residential/mobile proxy (Pro) to keep a residential IP. |
 
-## What your agent can do — 44 tools
+## What your agent can do — 59 tools
 
 All namespaced `whatsapp_*`; the model picks the right one from its description.
 
@@ -107,14 +109,20 @@ All namespaced `whatsapp_*`; the model picks the right one from its description.
 | **Groups** | `list_groups` · `get_group` · `create_group` · `update_group_participants` · `set_group_subject` · `set_group_description` · `get_group_invite` · `leave_group` |
 | **Queue & batches (Pro)** | `queue_import` — for people **already waiting on you**: one `{{field}}` template + up to 5000 rows, each row becoming one *individual, personalised* message paced by anti-ban · `queue_message` (one, scheduled) · `queue_status` · `list_queue` · `cancel_queued` · `retry_queued` · `list_batches` · `cancel_batch` · `retry_batch` · `pause_queue` · `resume_queue` |
 | **Sync & status** | `trigger_sync` · `sync_status` · `get_antiban_status` · `get_capabilities` · `list_accounts` |
+| **Agent (Pro)** — supervise SocialMate's own WhatsApp agent | `agent_list` · `agent_get` · `agent_pause` · `agent_resume` · `agent_usage` · `agent_usage_summary` · `agent_list_approvals` · `agent_decide_approval` · `agent_list_handoffs` · `agent_take_over` · `agent_release` · `agent_reply` (a human reply, sent as you, that keeps the agent out of that chat) · `agent_send_event` (start an event job — order update, booking reminder… — for a customer from your own records) · `agent_list_knowledge` · `agent_add_knowledge` |
 
 Account-scoped tools take an optional `account_id`; with a single-account key it's **auto-resolved**.
 A good first call is `whatsapp_get_capabilities` — it tells the agent its tier, scope and feature
 flags so it knows what it's allowed to do before it tries.
 
-<sub>The table lists 43. The 44th is `whatsapp_get_conversation`, a **deprecated alias** of
+<sub>The table lists 58. The 59th is `whatsapp_get_conversation`, a **deprecated alias** of
 `whatsapp_get_ai_context` — still served so existing agents don't break, but not worth teaching a new
 one.</sub>
+
+**SocialMate's own agent.** The `whatsapp_agent_*` tools supervise the native WhatsApp agent that runs
+inside the SocialMate app (Pro): pause it, answer what it is holding for approval, take a chat over and
+reply as yourself, hand it back, feed it a business event or a fact. The agent itself — its AI
+provider, persona, jobs and autonomy — is created and configured in the SocialMate app, not over MCP.
 
 **The vision loop.** `list_media` (`has_context: false`) → `get_media` (the item comes back as a real
 image content block your vision model can see) → `set_media_context` (cache the description). After
@@ -131,9 +139,10 @@ gate is closed the server tells the agent to *ask*, rather than to loop `send_me
 pattern that gets numbers banned.
 
 > **Deliberately not exposed:** API-key management, webhook wiring, the per-account proxy, media
-> *writes* (force-download / delete / cleanup), and the **raw media file** — an agent minting keys,
-> rewiring delivery, re-routing traffic, deleting files, or pulling a 15 MB blob into its context is a
-> footgun. Do those in the app, or over the HTTP API / n8n. The full list, with a reason per endpoint,
+> *writes* (force-download / delete / cleanup), the **raw media file**, and the native agent's
+> **setup** (creating, configuring or deleting an agent, AI provider keys, senses, the WordPress
+> pairing) — an agent minting keys, rewiring delivery, re-routing traffic, deleting files, rewriting
+> another agent's instructions, or pulling a 15 MB blob into its context is a footgun. Do those in the app, or over the HTTP API / n8n. The full list, with a reason per endpoint,
 > is the `NOT_EXPOSED` allowlist in [`contract.test.mjs`](contract.test.mjs) — a new app endpoint
 > fails the build until it is either given a tool or deliberately skipped there.
 
@@ -217,6 +226,7 @@ Tools honor the API key's **scope** and your **license tier**, exactly like the 
 | Send **media**, create/manage groups | — | ✅ |
 | History, **Get AI Context**, poll cursor | — | ✅ |
 | Smart queue (schedule / batch / control) | — | ✅ |
+| Supervise SocialMate's own WhatsApp agent (`whatsapp_agent_*`) | — | ✅ |
 
 A gated tool returns a clear *"requires Pro"* error rather than failing silently, so the agent can
 adapt (e.g. fall back to a plain text send).

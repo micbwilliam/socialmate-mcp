@@ -156,7 +156,14 @@ function formatError(err) {
 		}
 		return fail(`The API key is missing the '${inner.required || 'required'}' scope. Recreate it with more scope in the app → API & Integrations.`);
 	}
-	if (status === 409) return fail('That WhatsApp account is not connected. Link it in the SocialMate app first.');
+	if (status === 409) {
+		// Most 409s are "account not connected", but the agent routes use 409 for
+		// their own conflicts ("Already approved.", "Choose an AI provider…") —
+		// pass those through instead of misreporting them as a dead connection.
+		const msg = typeof inner.message === 'string' ? inner.message : '';
+		if (msg && !/not connected/i.test(msg)) return fail(msg);
+		return fail('That WhatsApp account is not connected. Link it in the SocialMate app first.');
+	}
 	if (status === 429) {
 		// Anti-ban block carries a reason/upgrade; the per-key limiter does not.
 		if (inner.reason) return fail(`Send blocked by anti-ban (reason: ${inner.reason}). ${inner.hint || 'Back off and retry later, or upgrade to Pro to auto-queue blocked sends.'}`);

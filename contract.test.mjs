@@ -66,6 +66,31 @@ const NOT_EXPOSED = {
 	'GET /v1/network/status': 'Tunnel/API server state — an ops surface.',
 	'GET /v1/accounts/:param': 'Redundant — whatsapp_list_accounts returns each account with its live state.',
 
+	// SocialMate's own WhatsApp agent (Pro, aiEnabled). MCP supervises it — list,
+	// pause/resume, approvals, hand-offs, a human reply, event jobs, usage,
+	// knowledge — but building and configuring an agent stays in the app, where
+	// the user sees the provider test, the persona and the consequences.
+	'POST /v1/accounts/:param/agent': 'Creating an agent is a setup decision (provider, keys, autonomy) that belongs in the app, not in an agent the user is chatting with.',
+	'PATCH /v1/agents/:param': 'Agent configuration (persona, autonomy, jobs, tool policies, budget, owner numbers) belongs in the app; an outside model rewriting another agent\'s instructions is a footgun.',
+	'DELETE /v1/agents/:param': 'Destructive and irreversible — deleting an agent drops its setup and history; a human does this in the app.',
+	'GET /v1/agents/:param/runs': 'Per-turn debugging trace for the app\'s Activity view; whatsapp_agent_usage covers what an outside agent needs.',
+	'GET /v1/agents/:param/runs/:param': 'Step-level tool arguments and results of a single run — a debugging surface, unbounded in size, not a conversational need.',
+	'GET /v1/agents/:param/conversations': 'Inbox listing for the app/WordPress UI; open hand-offs and approvals (the chats that need a person) are already exposed.',
+	'GET /v1/agents/:param/chats/:param/messages': 'Redundant — whatsapp_get_ai_context / whatsapp_search_messages already read a chat\'s history with the proper tier gate.',
+	'GET /v1/agents/:param/memory/:param': 'Per-customer memory the app\'s agent keeps for itself; reading it from outside surfaces personal data with no task attached.',
+	'POST /v1/agents/:param/memory/:param': 'Writing facts into another agent\'s memory about a customer is unverifiable from here; whatsapp_update_contact covers enrichment.',
+	'DELETE /v1/agents/:param/knowledge/:param': 'Destructive — removing knowledge the agent answers customers from is done in the app, where the user sees what goes.',
+	'GET /v1/ai/settings': 'Global AI settings (kill switch, monthly cap) are configuration that belongs in the app; whatsapp_agent_list shows each agent\'s state.',
+	'PUT /v1/ai/settings': 'Flipping the global kill switch or the spending cap for every agent is a human decision made in the app.',
+	'GET /v1/ai/senses': 'Senses configuration (speech/vision providers and their keys) belongs in the app.',
+	'PUT /v1/ai/senses': 'Configuration and secrets (third-party speech/vision keys) belong in the app, never in an MCP call.',
+	'POST /v1/ai/senses/test': 'A provider connection test for the app\'s settings screen; it spends the user\'s provider credit for no agent task.',
+	'POST /v1/connectors/wordpress': 'Pairing endpoint used by the SocialMate Agent Connect WordPress plugin; it carries signing secrets.',
+	'PATCH /v1/connectors/wordpress/:param': 'Secret rotation for the WordPress plugin pairing — called by the plugin itself.',
+	'DELETE /v1/connectors/wordpress/:param': 'Unpairing a website silently breaks the store\'s integration; the plugin or the app does this.',
+	'POST /v1/connectors/wordpress/:param/verify': 'Pairing health check called by the WordPress plugin; nothing an outside agent acts on.',
+	'POST /v1/connectors/wordpress/:param/manifest': 'Tool-list refresh pinged by the WordPress plugin when the site changes; plugin plumbing.',
+
 	// Deprecated in the app; the unified send endpoint supersedes it.
 	'POST /v1/accounts/:param/messages/media': 'Deprecated by the app — whatsapp_send_media uses the unified POST …/messages, which also auto-queues.',
 };

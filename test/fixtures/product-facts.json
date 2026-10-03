@@ -1,6 +1,6 @@
 {
   "_generated": "GENERATED FILE — do not edit by hand. Run `npm run gen:product-facts` after changing an anchor. Drift-guarded by src/shared/product-facts.test.ts. Map: docs/CROSS-REPO-CONTRACT.md.",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "tiers": {
     "free": {
       "maxAccounts": 1,
@@ -141,7 +141,20 @@
       "account.danger_mode_disabled",
       "license.activated",
       "license.deactivated",
-      "license.tier_changed"
+      "license.tier_changed",
+      "agent.reply_sent",
+      "agent.draft_created",
+      "agent.approval_requested",
+      "agent.approval_decided",
+      "agent.handoff_requested",
+      "agent.handoff_resolved",
+      "agent.paused",
+      "agent.resumed",
+      "agent.budget_warning",
+      "agent.injection_detected",
+      "agent.job_failed",
+      "agent.lead_captured",
+      "connector.revoked"
     ],
     "free": [
       "message.received",
@@ -155,9 +168,9 @@
       "license.tier_changed"
     ],
     "counts": {
-      "all": 35,
+      "all": 48,
       "free": 9,
-      "pro": 26
+      "pro": 39
     }
   },
   "endpoints": [
@@ -175,6 +188,14 @@
       "scope": "read",
       "pro": false,
       "proFeature": null,
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/accounts/:id/agent",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
       "deprecated": false
     },
     {
@@ -412,9 +433,9 @@
     {
       "method": "DELETE",
       "path": "/v1/accounts/:id/proxy",
-      "scope": "send",
-      "pro": false,
-      "proFeature": null,
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "proxyRouting",
       "deprecated": false
     },
     {
@@ -428,7 +449,7 @@
     {
       "method": "PUT",
       "path": "/v1/accounts/:id/proxy",
-      "scope": "send",
+      "scope": "admin",
       "pro": true,
       "proFeature": "proxyRouting",
       "deprecated": false
@@ -455,6 +476,230 @@
       "scope": "admin",
       "pro": true,
       "proFeature": "localMessageCache",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/agents/:id",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/agents/:id",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/approvals",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/approvals/:aid",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/chats/:chatId/messages",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/chats/:chatId/release",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/chats/:chatId/reply",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/chats/:chatId/takeover",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/conversations",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/events",
+      "scope": "send",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/handoffs",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/knowledge",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/knowledge",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/agents/:id/knowledge/:kid",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/memory/:chatId",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/memory/:chatId",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/pause",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/:id/resume",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/runs",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/runs/:runId",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/:id/usage",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/ai/senses",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/ai/senses",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/ai/senses/test",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/v1/ai/settings",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/ai/settings",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
       "deprecated": false
     },
     {
@@ -495,6 +740,46 @@
       "scope": "read",
       "pro": false,
       "proFeature": null,
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/connectors/wordpress",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/connectors/wordpress/:id",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/connectors/wordpress/:id",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/connectors/wordpress/:id/manifest",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/connectors/wordpress/:id/verify",
+      "scope": "admin",
+      "pro": true,
+      "proFeature": "aiEnabled",
       "deprecated": false
     },
     {
@@ -611,6 +896,14 @@
     },
     {
       "method": "GET",
+      "path": "/v1/usage/summary",
+      "scope": "read",
+      "pro": true,
+      "proFeature": "aiEnabled",
+      "deprecated": false
+    },
+    {
+      "method": "GET",
       "path": "/v1/version",
       "scope": "read",
       "pro": false,
@@ -675,11 +968,130 @@
     }
   ],
   "ai": {
-    "status": "coming-soon",
+    "status": "native-agent",
+    "runtime": "claude-agent-sdk",
+    "poweredBy": "Claude (Anthropic) — shown only when the agent runs a Claude model",
     "aiEnabled": {
       "free": false,
       "pro": true
-    }
+    },
+    "providers": [
+      "anthropic",
+      "deepseek",
+      "openrouter",
+      "ollama",
+      "moonshot",
+      "zai",
+      "minimax",
+      "custom",
+      "openai",
+      "groq",
+      "openai_compat"
+    ],
+    "jobs": [
+      {
+        "id": "support",
+        "mode": "reactive"
+      },
+      {
+        "id": "sales",
+        "mode": "reactive"
+      },
+      {
+        "id": "orders",
+        "mode": "reactive"
+      },
+      {
+        "id": "order_status",
+        "mode": "reactive"
+      },
+      {
+        "id": "booking",
+        "mode": "reactive"
+      },
+      {
+        "id": "follow_ups",
+        "mode": "reactive"
+      },
+      {
+        "id": "after_hours",
+        "mode": "reactive"
+      },
+      {
+        "id": "owner_assistant",
+        "mode": "reactive"
+      },
+      {
+        "id": "order_update",
+        "mode": "event"
+      },
+      {
+        "id": "payment_reminder",
+        "mode": "event"
+      },
+      {
+        "id": "booking_reminder",
+        "mode": "event"
+      },
+      {
+        "id": "form_followup",
+        "mode": "event"
+      },
+      {
+        "id": "review_request",
+        "mode": "event"
+      },
+      {
+        "id": "cart_recovery",
+        "mode": "event"
+      },
+      {
+        "id": "back_in_stock",
+        "mode": "event"
+      },
+      {
+        "id": "custom",
+        "mode": "event"
+      },
+      {
+        "id": "daily_brief",
+        "mode": "scheduled"
+      }
+    ],
+    "presets": [
+      "shop",
+      "clinic",
+      "real_estate",
+      "restaurant",
+      "services",
+      "support_desk",
+      "creator",
+      "blank"
+    ],
+    "autonomy": [
+      "observe",
+      "copilot",
+      "autopilot",
+      "autonomous"
+    ],
+    "capabilities": [
+      "reply",
+      "quote-reply",
+      "react",
+      "library-media",
+      "sticker",
+      "location",
+      "poll",
+      "human-handoff",
+      "approvals",
+      "owner-commands",
+      "event-jobs",
+      "knowledge",
+      "contact-memory",
+      "mcp-connectors",
+      "wordpress-connector",
+      "usage-and-cost-limits"
+    ]
   },
   "deployment": {
     "desktop": [
