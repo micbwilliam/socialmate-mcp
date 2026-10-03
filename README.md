@@ -19,7 +19,7 @@ or headless on your own VPS/Docker, managed from a browser at `/admin`). Point
 **Claude Desktop, Cursor, Cline** or any MCP client at it and your agent can send and read WhatsApp
 messages, look up contacts, manage groups, queue a paced batch of personalised messages, recall whole conversations, **look at the
 photos people send**, remember who it's talking to and what media said, check anti-ban headroom, and
-supervise SocialMate's own WhatsApp agent (Pro) —
+supervise SocialMate's built-in **Claude Agent** (Pro) —
 **59 tools**, all on your own machine and your own number.
 
 > **This server doesn't add an AI — it gives *your* AI a WhatsApp.** (SocialMate Pro also has its own
@@ -109,7 +109,7 @@ All namespaced `whatsapp_*`; the model picks the right one from its description.
 | **Groups** | `list_groups` · `get_group` · `create_group` · `update_group_participants` · `set_group_subject` · `set_group_description` · `get_group_invite` · `leave_group` |
 | **Queue & batches (Pro)** | `queue_import` — for people **already waiting on you**: one `{{field}}` template + up to 5000 rows, each row becoming one *individual, personalised* message paced by anti-ban · `queue_message` (one, scheduled) · `queue_status` · `list_queue` · `cancel_queued` · `retry_queued` · `list_batches` · `cancel_batch` · `retry_batch` · `pause_queue` · `resume_queue` |
 | **Sync & status** | `trigger_sync` · `sync_status` · `get_antiban_status` · `get_capabilities` · `list_accounts` |
-| **Agent (Pro)** — supervise SocialMate's own WhatsApp agent | `agent_list` · `agent_get` · `agent_pause` · `agent_resume` · `agent_usage` · `agent_usage_summary` · `agent_list_approvals` · `agent_decide_approval` · `agent_list_handoffs` · `agent_take_over` · `agent_release` · `agent_reply` (a human reply, sent as you, that keeps the agent out of that chat) · `agent_send_event` (start an event job — order update, booking reminder… — for a customer from your own records) · `agent_list_knowledge` · `agent_add_knowledge` |
+| **Agent (Pro)** — supervise SocialMate's built-in Claude Agent | `agent_list` · `agent_get` · `agent_pause` · `agent_resume` · `agent_usage` · `agent_usage_summary` · `agent_list_approvals` · `agent_decide_approval` · `agent_list_handoffs` · `agent_take_over` · `agent_release` · `agent_reply` (a human reply, sent as you, that keeps the agent out of that chat) · `agent_send_event` (start an event job — order update, booking reminder… — for a customer from your own records) · `agent_list_knowledge` · `agent_add_knowledge` |
 
 Account-scoped tools take an optional `account_id`; with a single-account key it's **auto-resolved**.
 A good first call is `whatsapp_get_capabilities` — it tells the agent its tier, scope and feature
@@ -119,8 +119,8 @@ flags so it knows what it's allowed to do before it tries.
 `whatsapp_get_ai_context` — still served so existing agents don't break, but not worth teaching a new
 one.</sub>
 
-**SocialMate's own agent.** The `whatsapp_agent_*` tools supervise the native WhatsApp agent that runs
-inside the SocialMate app (Pro): pause it, answer what it is holding for approval, take a chat over and
+**SocialMate's own agent — the Claude Agent.** The `whatsapp_agent_*` tools supervise the WhatsApp AI agent
+built into the SocialMate app (Pro). It is built on Anthropic's Claude Agent SDK; the model is the owner's choice. With these tools you can pause it, answer what it is holding for approval, take a chat over and
 reply as yourself, hand it back, feed it a business event or a fact. The agent itself — its AI
 provider, persona, jobs and autonomy — is created and configured in the SocialMate app, not over MCP.
 
@@ -226,7 +226,7 @@ Tools honor the API key's **scope** and your **license tier**, exactly like the 
 | Send **media**, create/manage groups | — | ✅ |
 | History, **Get AI Context**, poll cursor | — | ✅ |
 | Smart queue (schedule / batch / control) | — | ✅ |
-| Supervise SocialMate's own WhatsApp agent (`whatsapp_agent_*`) | — | ✅ |
+| Supervise SocialMate's Claude Agent (`whatsapp_agent_*`) | — | ✅ |
 
 A gated tool returns a clear *"requires Pro"* error rather than failing silently, so the agent can
 adapt (e.g. fall back to a plain text send).

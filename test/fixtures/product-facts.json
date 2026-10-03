@@ -970,7 +970,8 @@
   "ai": {
     "status": "native-agent",
     "runtime": "claude-agent-sdk",
-    "poweredBy": "Claude (Anthropic) — shown only when the agent runs a Claude model",
+    "brand": "Claude Agent",
+    "poweredBy": "Built on Anthropic's Claude Agent SDK for every provider; the model is the customer's choice and is never presented as Claude unless it is one",
     "aiEnabled": {
       "free": false,
       "pro": true
