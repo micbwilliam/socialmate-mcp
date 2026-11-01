@@ -54,10 +54,12 @@ const { version: VERSION } = createRequire(import.meta.url)('./package.json');
 const API_KEY = (process.env.SOCIALMATE_API_KEY || '').trim();
 const BASE_URL = (process.env.SOCIALMATE_BASE_URL || 'http://127.0.0.1:3456').replace(/\/+$/, '');
 
-// The value every documented config snippet ships with. Pasting the snippet without
-// swapping it in is the most common first-run mistake, and the app would only answer
-// it with an opaque 401 on the first tool call.
-const PLACEHOLDER_KEY = 'sm_paste_your_api_key_here';
+// The values the documented config snippets ship with: `sm_paste_your_api_key_here`
+// (README, app, website docs) and `sm_xxx` (the website's one-line `claude mcp add`).
+// Pasting a snippet without swapping it in is the most common first-run mistake, and
+// both pass the `sm_` prefix check — the app would only answer an opaque 401 on the
+// first tool call.
+const PLACEHOLDER_KEYS = new Set(['sm_paste_your_api_key_here', 'sm_xxx']);
 const CREATE_KEY_HINT =
 	'Create a key in SocialMate → API & Integrations → MCP → "Create key & copy config", then paste that config into your MCP client.';
 
@@ -66,8 +68,8 @@ if (!API_KEY) {
 	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is required. ${CREATE_KEY_HINT}\n`);
 	process.exit(2);
 }
-if (API_KEY === PLACEHOLDER_KEY) {
-	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is still the placeholder "${PLACEHOLDER_KEY}". ${CREATE_KEY_HINT}\n`);
+if (PLACEHOLDER_KEYS.has(API_KEY)) {
+	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is still the placeholder "${API_KEY}". ${CREATE_KEY_HINT}\n`);
 	process.exit(2);
 }
 if (!API_KEY.startsWith('sm_')) {

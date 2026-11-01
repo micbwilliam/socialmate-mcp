@@ -67,7 +67,8 @@ async function waitFor(predicate, ms = 4000) {
 
 for (const [label, key, expect] of [
 	['missing', '', /SOCIALMATE_API_KEY is required/],
-	['the documented placeholder', 'sm_paste_your_api_key_here', /still the placeholder/],
+	['the documented placeholder', 'sm_paste_your_api_key_here', /still the placeholder "sm_paste_your_api_key_here"/],
+	['the website one-liner placeholder', 'sm_xxx', /still the placeholder "sm_xxx"/],
 	['not sm_-prefixed', 'sk-live-123', /starts with "sm_"/],
 ]) {
 	test(`a ${label} API key exits 2 with a create-key hint on stderr and nothing on stdout`, async () => {
