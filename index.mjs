@@ -232,6 +232,12 @@ function formatError(err) {
 	}
 	if (status === 429) {
 		const wait = retryAfterText(err);
+		// The signal lane (typing / read receipts / reactions) has its own cap,
+		// separate from the message budget. Signals are never queued on any tier,
+		// so the "upgrade to Pro to auto-queue" pitch below would be false here.
+		if (inner.reason === 'signal_rate_limit' || inner.code === 'ANTI_BAN_SIGNAL_RATE_LIMIT') {
+			return fail(`Signal rate limit hit (typing/read/reaction) — ${wait ? `retry after ${wait}` : 'retry in a moment'}. This cap is separate from the message budget. Do not resend in a loop.`);
+		}
 		// Anti-ban block carries a reason/hint; the per-key request limiter does not.
 		if (inner.reason) {
 			return fail(`Send blocked by anti-ban (reason: ${inner.reason})${wait ? ` — retry after ${wait}` : ''}. ${inner.hint || 'Back off and retry later, or upgrade to Pro to auto-queue blocked sends.'} Do not resend in a loop.`);

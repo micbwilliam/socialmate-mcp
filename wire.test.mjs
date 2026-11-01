@@ -144,6 +144,30 @@ test('a Free anti-ban 429 names the reason, the wait and the app’s hint', asyn
 	assert.match(textOf(res), /Do not resend in a loop/);
 });
 
+for (const [tool, args] of [
+	['whatsapp_react_message', { chat_id: '15551234567', message_id: 'm1', emoji: '👍' }],
+	['whatsapp_mark_read', { chat_id: '15551234567' }],
+	['whatsapp_send_typing', { chat_id: '15551234567', state: 'composing' }],
+]) {
+	test(`a signal_rate_limit 429 on ${tool} says to wait, with no Pro auto-queue pitch`, async () => {
+		// Signals (typing/read/reaction) are never queued on any tier, so "upgrade to
+		// Pro to auto-queue" would send the user to buy something that changes nothing.
+		const res = await callWith(FX.signal_rate_limit, tool, args);
+		assert.equal(res.isError, true);
+		assert.match(textOf(res), /^Signal rate limit hit \(typing\/read\/reaction\) — retry after 12 s\./);
+		assert.doesNotMatch(textOf(res), /Pro|auto-queue|upgrade/i);
+		assert.match(textOf(res), /Do not resend in a loop/);
+	});
+}
+
+test('a signal_rate_limit 429 with no wait still says to slow down, not upgrade', async () => {
+	const fx = structuredClone(FX.signal_rate_limit);
+	delete fx.body.error.retryAfterMs;
+	const res = await callWith(fx, 'whatsapp_mark_read', { chat_id: '15551234567' });
+	assert.match(textOf(res), /^Signal rate limit hit \(typing\/read\/reaction\) — retry in a moment\./);
+	assert.doesNotMatch(textOf(res), /Pro|auto-queue/i);
+});
+
 // ── 202: a Pro send that anti-ban deferred is queued, not sent, and not an error ──
 
 test('a Pro 202 { queued } answer to whatsapp_send_message is a success the agent can read', async () => {

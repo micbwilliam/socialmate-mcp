@@ -117,6 +117,19 @@
 			}
 		}
 	},
+	"signal_rate_limit": {
+		"_note": "Signal lane (react / mark read / typing). Not captured live (it needs the signal cap exhausted): built from api-server.ts setErrorHandler (AntiBanError -> 429 { error: message, code, reason, retryAfterMs, factor }, no Retry-After header) put through the onSend hook, where the explicit code wins. Message text from anti-ban/pipeline.ts. Same shape as n8n-nodes-socialmate test/fixtures/api-error-envelopes.ts signalRateLimitLong.",
+		"status": 429,
+		"body": {
+			"error": {
+				"code": "ANTI_BAN_SIGNAL_RATE_LIMIT",
+				"message": "Signal rate limit hit (signal_minute_limit). Try again in 12s.",
+				"reason": "signal_rate_limit",
+				"retryAfterMs": 11200,
+				"factor": "signal_minute_limit"
+			}
+		}
+	},
 	"rate_limited_per_key": {
 		"status": 429,
 		"retryAfter": "5",
