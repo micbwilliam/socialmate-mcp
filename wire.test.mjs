@@ -152,6 +152,19 @@ test('a Pro 202 { queued } answer to whatsapp_send_message is a success the agen
 	assert.deepEqual(JSON.parse(textOf(res)), FX.send_queued_pro.body.data);
 });
 
+test('the auto-queueing send tools document the 202 { queued } outcome, so the agent never resends it', async () => {
+	// Text sends and URL-media sends are the two paths the app auto-queues on Pro
+	// (api-server.ts POST /messages). A tool that only promises { sent: true } leaves
+	// the agent reading { queued: true } as a failure and sending again.
+	const { tools } = await client.listTools();
+	for (const name of ['whatsapp_send_message', 'whatsapp_send_media']) {
+		const d = tools.find((t) => t.name === name).description;
+		assert.match(d, /\{ queued: true, itemId, reason, retryAfterMs, priority \}/, `${name} does not document the 202 queued shape`);
+		assert.match(d, /NOT been sent yet/, `${name} does not say a queued send has not gone out`);
+		assert.match(d, /do not resend/, `${name} does not tell the agent not to resend`);
+	}
+});
+
 // ── scheduled_at: a time the app can't read must never become "send now" ─────
 
 for (const [tool, args] of [

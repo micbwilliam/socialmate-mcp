@@ -105,7 +105,7 @@ export const TOOLS = [
 	{
 		name: 'whatsapp_send_media',
 		description:
-			'Sends an image, video, audio, document or sticker to a chat from a public https URL, with an optional caption. Returns { sent: true, messageId, chatId, type, timestamp, status }. As with every send, `status` is the send-time state ("sent" = handed to WhatsApp, not proof it arrived) — the real outcome arrives later on the `message.delivered` / `message.read` webhooks, or by re-reading the row with whatsapp_fetch_new_messages / whatsapp_search_messages. Use whatsapp_send_message for plain text. Requires SocialMate Pro.',
+			'Sends an image, video, audio, document or sticker to a chat from a public https URL, with an optional caption. Returns { sent: true, messageId, chatId, type, timestamp, status }. As with every send, `status` is the send-time state ("sent" = handed to WhatsApp, not proof it arrived) — the real outcome arrives later on the `message.delivered` / `message.read` webhooks, or by re-reading the row with whatsapp_fetch_new_messages / whatsapp_search_messages. If anti-ban blocks the send, the media is auto-queued and you get { queued: true, itemId, reason, retryAfterMs, priority } instead — it has NOT been sent yet but will go out when anti-ban allows: tell the user it is on its way, do not resend it, and track it with whatsapp_list_queue / whatsapp_queue_status. Use whatsapp_send_message for plain text. Requires SocialMate Pro.',
 		inputSchema: {
 			account_id: accountId,
 			chat_id: chatId,
