@@ -103,6 +103,44 @@
       "hardCeilingPerDay": 5000,
       "warmingRequiredHours": 72,
       "acknowledgmentVersion": "v2-2026-07"
+    },
+    "warming": {
+      "phases": [
+        {
+          "id": "cold_warming",
+          "startHours": 0,
+          "endHours": 6,
+          "maxColdSends": 20
+        },
+        {
+          "id": "warming_day0",
+          "startHours": 6,
+          "endHours": 24,
+          "maxColdSends": 20
+        },
+        {
+          "id": "warming_day1",
+          "startHours": 24,
+          "endHours": 48,
+          "maxColdSends": 50
+        },
+        {
+          "id": "warming_day2",
+          "startHours": 48,
+          "endHours": 72,
+          "maxColdSends": 100
+        }
+      ],
+      "warmAtHours": 72,
+      "counts": "cold-outbound",
+      "exempt": [
+        "reply-to-contact-who-wrote",
+        "own-number"
+      ],
+      "neverExempt": [
+        "groups",
+        "status"
+      ]
     }
   },
   "webhookEvents": {
@@ -171,6 +209,61 @@
       "all": 48,
       "free": 9,
       "pro": 39
+    },
+    "quotaExempt": [
+      "account.connected",
+      "account.disconnected",
+      "tunnel.started",
+      "tunnel.url_changed",
+      "tunnel.stopped",
+      "license.activated",
+      "license.deactivated",
+      "license.tier_changed",
+      "connector.revoked"
+    ]
+  },
+  "webhookSamples": {
+    "messageReceived": {
+      "version": 1,
+      "event": "message.received",
+      "timestamp": "2026-11-01T10:00:00.000Z",
+      "tunnelUrl": "https://example.trycloudflare.com",
+      "data": {
+        "account": {
+          "id": "acc-1",
+          "phone": "201000000001",
+          "name": "Shop"
+        },
+        "accountId": "acc-1",
+        "messageId": "3EB0C767D26A1B2F3C4D",
+        "chat": {
+          "id": "447700900123",
+          "name": "Amira",
+          "phone": "447700900123",
+          "jid": "447700900123@s.whatsapp.net",
+          "displayName": "Amira . 447700900123",
+          "type": "individual"
+        },
+        "chatId": "447700900123",
+        "sender": {
+          "id": "447700900123",
+          "name": "Amira",
+          "phone": "447700900123",
+          "jid": "447700900123@s.whatsapp.net",
+          "lid": "123456789012345@lid",
+          "displayName": "Amira . 447700900123"
+        },
+        "senderId": "447700900123",
+        "body": "Hi, is the blue mug still in stock?",
+        "type": "text",
+        "timestamp": 1793527198000,
+        "fromMe": false,
+        "source": "received",
+        "hasMedia": false,
+        "media": null,
+        "metadata": null,
+        "replyTo": null
+      }
     }
   },
   "endpoints": [
@@ -1116,6 +1209,9 @@
       "voice-notes",
       "photos"
     ]
+  },
+  "wordpressPlugin": {
+    "latestVersion": "1.0.0"
   },
   "deployment": {
     "desktop": [
