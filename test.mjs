@@ -79,9 +79,9 @@ function startMock() {
 			if (req.method === 'POST' && path === '/v1/accounts/acc1/queue/import') {
 				const body = chunks ? JSON.parse(chunks) : {};
 				if (body.batchName === '__DISABLED__') {
-					// The real 403 shape: a product gate (bulk import is off by default),
-					// NOT a missing API-key scope.
-					return send(403, { error: 'bulk_import_disabled', message: 'Batch sending is turned off. Ask the user to switch it on in the app under Settings → Advanced → Enable batch sending.' });
+					// The real (v1.1-enveloped) 403 shape: a product gate (bulk import is
+					// off by default), NOT a missing API-key scope.
+					return send(403, { error: { code: 'bulk_import_disabled', message: 'Batch sending is turned off. Ask the user to switch it on in the app under Settings → Advanced → Enable batch sending.' } });
 				}
 				return send(200, { data: { success: true, batch: { id: 'batch_1', name: body.batchName }, itemCount: (body.rows ?? []).length, echo: body } });
 			}

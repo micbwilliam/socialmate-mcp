@@ -79,13 +79,30 @@ if (!API_KEY.startsWith('sm_')) {
 
 /** Call the SocialMate REST API and unwrap the { data } envelope. Throws an ApiError on non-2xx. */
 class ApiError extends Error {
-	constructor(status, body) {
-		const inner = (body && typeof body === 'object' && body.error) || {};
-		super(inner.message || (typeof body?.error === 'string' ? body.error : `HTTP ${status}`));
+	constructor(status, body, { retryAfterHeader } = {}) {
+		// The app answers errors as `{ error: { code, message, ...extra } }` (v1.1
+		// envelope). A pre-1.1 bare `{ error: 'code', message }` is folded into the
+		// same shape so formatError only ever branches on `inner.code`.
+		const raw = body && typeof body === 'object' ? body.error : undefined;
+		const inner =
+			raw && typeof raw === 'object'
+				? raw
+				: typeof raw === 'string'
+					? typeof body.message === 'string'
+						? { ...body, code: raw, message: body.message }
+						: { ...body, message: raw }
+					: {};
+		super(inner.message || `HTTP ${status}`);
 		this.status = status;
 		this.body = body;
 		this.inner = inner;
+		this.retryAfterHeader = retryAfterHeader ?? null;
 	}
+}
+
+/** Build the ApiError for a non-2xx response, keeping the Retry-After header for 429s. */
+function apiErrorFrom(res, body) {
+	return new ApiError(res.status, body, { retryAfterHeader: res.headers.get('retry-after') });
 }
 
 async function request(method, path, { body, qs } = {}) {
@@ -98,7 +115,7 @@ async function request(method, path, { body, qs } = {}) {
 			body: body ? JSON.stringify(body) : undefined,
 		});
 	} catch (e) {
-		throw new ApiError(0, { error: { message: `Cannot reach the SocialMate server at ${BASE_URL}. Is the app running and the API enabled? (${e.message})` } });
+		throw new ApiError(0, { error: { message: `Cannot reach the SocialMate server at ${BASE_URL}. Is the app running with its local API on (API & Integrations)? (${e.message})` } });
 	}
 }
 
@@ -116,7 +133,7 @@ async function errorBody(res) {
 async function call(method, path, { body, qs } = {}) {
 	const res = await request(method, path, { body, qs });
 	const parsed = await errorBody(res);
-	if (!res.ok) throw new ApiError(res.status, parsed);
+	if (!res.ok) throw apiErrorFrom(res, parsed);
 	// Unwrap `{ data }` — but ONLY when `data` is the whole envelope. The paginated
 	// routes answer `{ data, pagination }`, and unwrapping those would throw the
 	// pagination away, leaving an agent unable to tell that there is a next page.
@@ -131,7 +148,7 @@ async function call(method, path, { body, qs } = {}) {
  */
 async function callBinary(method, path, { qs } = {}) {
 	const res = await request(method, path, { qs });
-	if (!res.ok) throw new ApiError(res.status, await errorBody(res));
+	if (!res.ok) throw apiErrorFrom(res, await errorBody(res));
 	// The only binary route we expose is the thumbnail, which is always JPEG.
 	const mimeType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
 	return { data: Buffer.from(await res.arrayBuffer()).toString('base64'), mimeType };
@@ -162,33 +179,63 @@ function fail(message) {
 	return { content: [{ type: 'text', text: message }], isError: true };
 }
 
+/**
+ * How long the app asked us to wait, as human text ("5 s", "60 min"), from the
+ * body's retryAfterMs or else the Retry-After header (seconds). Null if neither.
+ */
+function retryAfterText(err) {
+	let ms = Number(err.inner?.retryAfterMs);
+	if (!Number.isFinite(ms) || ms <= 0) {
+		const sec = Number(err.retryAfterHeader);
+		ms = Number.isFinite(sec) && sec > 0 ? sec * 1000 : NaN;
+	}
+	if (!Number.isFinite(ms)) return null;
+	const sec = Math.max(1, Math.ceil(ms / 1000));
+	if (sec < 90) return `${sec} s`;
+	const min = Math.ceil(sec / 60);
+	if (min < 90) return `${min} min`;
+	return `${Math.round((min / 60) * 10) / 10} h`;
+}
+
 /** Turn an ApiError into an agent-friendly message that preserves the actionable signal. */
 function formatError(err) {
 	if (!(err instanceof ApiError)) return fail(`Unexpected error: ${err.message}`);
 	const { status, inner } = err;
+	const serverMessage = typeof inner.message === 'string' && inner.message ? inner.message : '';
+	if (status === 401) {
+		// The key reached the app and was refused: revoked, rotated, deleted, or
+		// mistyped. Recreating it is the only fix, so say where.
+		return fail(`SocialMate rejected the API key (${serverMessage || 'unauthorized'}) — it was revoked, rotated or mistyped. ${CREATE_KEY_HINT}`);
+	}
 	if (status === 402) return fail(`This requires SocialMate Pro (feature: ${inner.feature || 'unknown'}). Upgrade in the app, or use a Free-tier tool.`);
 	if (status === 403) {
-		// Batch sending is opt-in and OFF by default, so its 403 is a product gate,
-		// not a scope problem — pass the server's own instruction through rather
-		// than sending the agent to rebuild its API key. (`bulk_import_disabled` is
-		// the wire code and never changes; only the words the agent reads do.)
-		if (err.body?.error === 'bulk_import_disabled') {
-			return fail(err.body.message || 'Batch sending is switched off. The user must enable it in the app under Settings → Advanced → "Enable batch sending". Do not fall back to sending the messages one by one.');
+		// Branch on the app's stable machine code. Only `insufficient_scope` is a
+		// key-scope problem; every other 403 (batch sending off, a key scoped to a
+		// different account, every scoped account suspended on Free, not a group
+		// admin) carries its own instruction, which recreating the key won't fix.
+		if (inner.code === 'insufficient_scope') {
+			return fail(`The API key is missing the '${inner.required || 'required'}' scope${Array.isArray(inner.have) ? ` (it has: ${inner.have.join(', ') || 'none'})` : ''}. Create a key with that scope in the app → API & Integrations, and put it in your MCP config.`);
 		}
-		return fail(`The API key is missing the '${inner.required || 'required'}' scope. Recreate it with more scope in the app → API & Integrations.`);
+		if (inner.code === 'bulk_import_disabled') {
+			// `bulk_import_disabled` is the wire code and never changes; only the words the agent reads do.
+			return fail(serverMessage || 'Batch sending is switched off. The user must enable it in the app under Settings → Advanced → "Enable batch sending". Do not fall back to sending the messages one by one.');
+		}
+		return fail(serverMessage || 'SocialMate refused this request (403).');
 	}
 	if (status === 409) {
 		// Most 409s are "account not connected", but the agent routes use 409 for
 		// their own conflicts ("Already approved.", "Choose an AI provider…") —
 		// pass those through instead of misreporting them as a dead connection.
-		const msg = typeof inner.message === 'string' ? inner.message : '';
-		if (msg && !/not connected/i.test(msg)) return fail(msg);
+		if (serverMessage && !/not connected/i.test(serverMessage)) return fail(serverMessage);
 		return fail('That WhatsApp account is not connected. Link it in the SocialMate app first.');
 	}
 	if (status === 429) {
-		// Anti-ban block carries a reason/upgrade; the per-key limiter does not.
-		if (inner.reason) return fail(`Send blocked by anti-ban (reason: ${inner.reason}). ${inner.hint || 'Back off and retry later, or upgrade to Pro to auto-queue blocked sends.'}`);
-		return fail('Rate limited — slow down and retry in a moment.');
+		const wait = retryAfterText(err);
+		// Anti-ban block carries a reason/hint; the per-key request limiter does not.
+		if (inner.reason) {
+			return fail(`Send blocked by anti-ban (reason: ${inner.reason})${wait ? ` — retry after ${wait}` : ''}. ${inner.hint || 'Back off and retry later, or upgrade to Pro to auto-queue blocked sends.'} Do not resend in a loop.`);
+		}
+		return fail(`Rate limited (${serverMessage || 'too many requests'}) — ${wait ? `retry after ${wait}` : 'slow down and retry in a moment'}.`);
 	}
 	return fail(err.message);
 }
