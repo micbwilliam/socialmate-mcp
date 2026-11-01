@@ -43,6 +43,8 @@ test('every documented API-key value uses the real sm_ format', () => {
 		assert.ok(values.length > 0, `${file} documents no SOCIALMATE_API_KEY value at all`);
 
 		for (const v of values) {
+			// A shell reference ("$SOCIALMATE_API_KEY") documents no key value of its own.
+			if (v.startsWith('"$') || v.startsWith('$')) continue;
 			assert.ok(v.startsWith('sm_'), `${file}: key value "${v}" is not the real sm_ format`);
 			assert.ok(!v.includes('_live_'), `${file}: key value "${v}" uses a fabricated "_live_" segment`);
 			assert.ok(!/^sk[-_]/.test(v), `${file}: key value "${v}" is OpenAI-shaped, not SocialMate`);
@@ -100,6 +102,24 @@ test('the README leads with the API-server prerequisite', () => {
 	assert.match(prereqs, /Creating a key[^.]*turns the local\s+API on/i, 'the README no longer says creating a key turns the local API on');
 	assert.match(prereqs, /check that \*\*API &\s+Integrations\*\* shows the API running/i, 'the README no longer says where to check the API is running');
 	assert.match(prereqs, /SocialMate API not reachable at/, 'the README no longer names the startup warning to look for');
+});
+
+test('the README Inspector command runs as pasted — no key the server refuses', () => {
+	// The Inspector line is a command to run, not a config to edit. It once passed
+	// sm_paste_your_api_key_here, which index.mjs refuses at startup, so pasting it
+	// launched an Inspector whose server had already exited.
+	const index = read('index.mjs');
+	const set = /const PLACEHOLDER_KEYS = new Set\(\[([^\]]*)\]\)/.exec(index);
+	assert.ok(set, 'index.mjs no longer declares PLACEHOLDER_KEYS');
+	const placeholders = [...set[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+	assert.ok(placeholders.length > 0);
+
+	const lines = read('README.md').split('\n').filter((l) => /@modelcontextprotocol\/inspector/.test(l));
+	assert.ok(lines.length > 0, 'the README lost its Inspector command');
+	for (const line of lines) {
+		for (const p of placeholders) assert.ok(!line.includes(p), `the Inspector command passes the placeholder key ${p} → ${line.trim()}`);
+		assert.match(line, /npx -y socialmate-mcp/, 'the Inspector command must launch the server with npx -y');
+	}
 });
 
 test('both Claude Desktop and Claude Code have a documented path', () => {

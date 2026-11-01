@@ -243,12 +243,13 @@ adapt (e.g. fall back to a plain text send).
 Browse and call every tool interactively with the MCP Inspector:
 
 ```bash
-npx @modelcontextprotocol/inspector -e SOCIALMATE_API_KEY=sm_paste_your_api_key_here npx -y socialmate-mcp
+printf 'SocialMate API key: '; read -rs SOCIALMATE_API_KEY; echo
+npx @modelcontextprotocol/inspector -e SOCIALMATE_API_KEY="$SOCIALMATE_API_KEY" npx -y socialmate-mcp
 ```
 
-Swap in your real key first — the server refuses to start with the placeholder. Add
-`-e SOCIALMATE_BASE_URL=…` only if the app is not at `http://127.0.0.1:3456`. (You can also set both
-in the Inspector's **Environment Variables** panel.)
+The first line asks for your key (from **API & Integrations → MCP**) without echoing it or saving it
+in your shell history. Add `-e SOCIALMATE_BASE_URL=…` only if the app is not at
+`http://127.0.0.1:3456`. (You can also set both in the Inspector's **Environment Variables** panel.)
 
 Run the test suite (spawns the server against a mock REST API and drives it over MCP):
 
