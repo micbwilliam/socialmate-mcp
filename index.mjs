@@ -238,9 +238,16 @@ function formatError(err) {
 		if (inner.reason === 'signal_rate_limit' || inner.code === 'ANTI_BAN_SIGNAL_RATE_LIMIT') {
 			return fail(`Signal rate limit hit (typing/read/reaction) — ${wait ? `retry after ${wait}` : 'retry in a moment'}. This cap is separate from the message budget. Do not resend in a loop.`);
 		}
-		// Anti-ban block carries a reason/hint; the per-key request limiter does not.
+		// Anti-ban block carries a reason; the per-key request limiter does not.
+		// The send routes add their own tier-aware `hint`. A reason with no hint
+		// comes only from the app's shared error handler, i.e. the routes that are
+		// never auto-queued on any tier (signal lane pauses/bans, group writes), so
+		// an "upgrade to Pro to auto-queue" fallback would be false there.
+		if (inner.reason && inner.hint) {
+			return fail(`Send blocked by anti-ban (reason: ${inner.reason})${wait ? ` — retry after ${wait}` : ''}. ${inner.hint} Do not resend in a loop.`);
+		}
 		if (inner.reason) {
-			return fail(`Send blocked by anti-ban (reason: ${inner.reason})${wait ? ` — retry after ${wait}` : ''}. ${inner.hint || 'Back off and retry later, or upgrade to Pro to auto-queue blocked sends.'} Do not resend in a loop.`);
+			return fail(`Blocked by anti-ban (reason: ${inner.reason})${wait ? ` — retry after ${wait}` : ''}. This action is not auto-queued on any tier — back off and retry once the block clears. Do not resend in a loop.`);
 		}
 		return fail(`Rate limited (${serverMessage || 'too many requests'}) — ${wait ? `retry after ${wait}` : 'slow down and retry in a moment'}.`);
 	}

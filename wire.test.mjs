@@ -168,6 +168,27 @@ test('a signal_rate_limit 429 with no wait still says to slow down, not upgrade'
 	assert.doesNotMatch(textOf(res), /Pro|auto-queue/i);
 });
 
+// A 429 that carries a reason but no hint comes only from the app's shared
+// setErrorHandler — the routes that rethrow AntiBanError: the signal lane
+// (paused / banned) and the group writes. None of them is ever auto-queued, on
+// any tier, so a fallback "upgrade to Pro to auto-queue" would be false.
+for (const [tool, args, reason] of [
+	['whatsapp_react_message', { chat_id: '15551234567', message_id: 'm1', emoji: '👍' }, 'paused_account'],
+	['whatsapp_send_typing', { chat_id: '15551234567', state: 'composing' }, 'paused_global'],
+	['whatsapp_update_group_participants', { group_id: '123@g.us', participants: ['15551234567'], action: 'add' }, 'rate_limit'],
+]) {
+	test(`a hint-less anti-ban 429 (${reason}) on ${tool} does not pitch the Pro auto-queue`, async () => {
+		const fx = structuredClone(FX.signal_rate_limit);
+		Object.assign(fx.body.error, { code: `ANTI_BAN_${reason.toUpperCase()}`, message: 'Account is paused', reason, retryAfterMs: null, factor: null });
+		const res = await callWith(fx, tool, args);
+		assert.equal(res.isError, true);
+		assert.match(textOf(res), new RegExp(`^Blocked by anti-ban \\(reason: ${reason}\\)\\.`));
+		assert.doesNotMatch(textOf(res), /\bPro\b|upgrade/i);
+		assert.match(textOf(res), /not auto-queued/);
+		assert.match(textOf(res), /Do not resend in a loop/);
+	});
+}
+
 // ── 202: a Pro send that anti-ban deferred is queued, not sent, and not an error ──
 
 test('a Pro 202 { queued } answer to whatsapp_send_message is a success the agent can read', async () => {
