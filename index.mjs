@@ -225,6 +225,11 @@ function retryAfterText(err) {
 	return `${Math.round((min / 60) * 10) / 10} h`;
 }
 
+/** A 404 for an account id that names no account on this SocialMate. */
+function isAccountNotFound(err) {
+	return err.status === 404 && typeof err.inner?.message === 'string' && /^account not found/i.test(err.inner.message);
+}
+
 /** Turn an ApiError into an agent-friendly message that preserves the actionable signal. */
 function formatError(err) {
 	if (!(err instanceof ApiError)) return fail(`Unexpected error: ${err.message}`);
@@ -250,7 +255,7 @@ function formatError(err) {
 		}
 		return fail(serverMessage || 'SocialMate refused this request (403).');
 	}
-	if (status === 404 && /^account not found/i.test(serverMessage)) {
+	if (isAccountNotFound(err)) {
 		// An account_id that names no account on this SocialMate (mistyped, removed,
 		// or from another install). Point at the tool that lists the real ones.
 		return fail('Account not found — that account_id is not a WhatsApp number linked to this SocialMate. Call whatsapp_list_accounts for valid ids.');
@@ -301,6 +306,12 @@ for (const tool of TOOLS) {
 				const data = await call(req.method, req.path, { body: req.body, qs: req.qs });
 				return ok(data);
 			} catch (err) {
+				if (tool.accountScoped && !args.account_id && err instanceof ApiError && isAccountNotFound(err)) {
+					// The auto-selected id came from a stale cache (the number was removed
+					// or re-linked under a new id). Drop it so the retry re-reads /v1/accounts.
+					accountsCache = null;
+					return fail('The WhatsApp number this server had auto-selected is no longer linked to SocialMate (it was removed or re-linked). The account list has been refreshed — retry the call, or call whatsapp_list_accounts for valid ids.');
+				}
 				return formatError(err);
 			}
 		},

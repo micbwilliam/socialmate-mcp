@@ -109,3 +109,17 @@ test('an unknown account_id points at whatsapp_list_accounts', async () => {
 	assert.match(textOf(res), /^Account not found/);
 	assert.match(textOf(res), /Call whatsapp_list_accounts for valid ids/);
 });
+
+test('a cached number that was removed and re-linked under a new id: says so, refreshes, and the retry works', async () => {
+	// acc-1 is cached from the step above; the user removes it and links acc-2.
+	Object.assign(state, { accounts: [{ id: 'acc-2', name: 'Shop', status: 'connected' }], keyScope: null, capabilitiesFail: false });
+	seen.length = 0;
+	const first = await send();
+	assert.equal(first.isError, true);
+	assert.match(textOf(first), /no longer linked to SocialMate/);
+	assert.deepEqual(seen, ['POST /v1/accounts/acc-1/messages']);
+	seen.length = 0;
+	const retry = await send();
+	assert.notEqual(retry.isError, true, textOf(retry));
+	assert.deepEqual(seen, ['GET /v1/accounts', 'POST /v1/accounts/acc-2/messages']);
+});
