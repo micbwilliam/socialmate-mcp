@@ -33,13 +33,14 @@
  * Keep the `-y`: without it npx can stop to ask you to confirm the install, inside
  * a stdio client where there is no terminal to answer it — so the server never starts.
  *
- * Two prerequisites, in this order:
- *   1. The app's **local API server must be switched on** — it is OFF by default
- *      (SocialMate → API & Integrations). Everything below talks to it over loopback;
- *      if it isn't running you get a clean tool list and every call fails.
- *   2. An **API key** (API & Integrations → API Keys). A real key is `sm_<base64url>` —
- *      there is no `sk-`/`sk_` prefix and no `_live_` segment in this product. The key's
- *      scope (read / send / admin) and your license tier decide which tools actually work.
+ * Two prerequisites:
+ *   1. An **API key** (API & Integrations → MCP → "Create key & copy config"). A real key
+ *      is `sm_<base64url>` — there is no `sk-`/`sk_` prefix and no `_live_` segment in this
+ *      product. The key's scope (read / send / admin) and your license tier decide which
+ *      tools actually work.
+ *   2. The app's **local API running**. It ships off, but creating a key turns it on. Everything
+ *      below talks to it over loopback; if it isn't running you get a clean tool list and
+ *      every call fails — check API & Integrations shows it running.
  */
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';

@@ -38,12 +38,13 @@ supervise SocialMate's built-in **Claude Agent** (Pro) —
 
 - **SocialMate running** — either the **desktop app** or a **headless VPS/Docker** install. Point
   `SOCIALMATE_BASE_URL` at whichever you run; the tools are identical.
-- **Its local API server switched on.** ⚠️ It is **off by default** — turn it on in
-  **API & Integrations**. This is the single most common reason the tools don't show up: the MCP
-  server starts fine, then has nothing to talk to. On startup it checks the app's `/health` and, if
-  nothing answers, logs `SocialMate API not reachable at …` to your MCP client's server log (stderr).
-- An **API key** from the app (**API & Integrations → API Keys → new key**). Its scope
-  (read / send / admin) and your license tier decide which tools work.
+- An **API key** from the app — the quickest route is **API & Integrations → MCP → "Create key &
+  copy config"**. Its scope (read / send / admin) and your license tier decide which tools work.
+- **Its local API running.** Creating a key (or using "Create key & copy config") turns the local
+  API on for you. If the tools still don't appear, or every call fails, check that **API &
+  Integrations** shows the API running — the MCP server starts fine either way, then has nothing to
+  talk to. On startup it checks the app's `/health` and, if nothing answers, logs
+  `SocialMate API not reachable at …` to your MCP client's server log (stderr).
 - **Node.js ≥ 18.17** (only to run `npx` — there is nothing to install globally; `npx` fetches this
   package on first run).
 
@@ -107,12 +108,13 @@ All namespaced `whatsapp_*`; the model picks the right one from its description.
 |---|---|
 | **Messaging** | `send_message` (with `reply_to` to quote) · `send_media` · `send_poll` · `get_poll_results` · `send_location` · `send_contact` |
 | **Conversational signals** | `react_message` (`emoji: ""` removes) · `mark_read` · `send_typing` — free on every tier; they consume no send budget and don't raise the risk score |
-| **Memory & reading** | `get_ai_context` (role-mapped memory feed) · `search_messages` · `fetch_new_messages` (poll cursor) · `list_chats` |
+| **Memory & reading** | `get_ai_context` (role-mapped memory feed) · `search_messages` · `fetch_new_messages` (poll cursor) — Pro · `list_chats` (every tier) |
 | **Vision (see what people send)** | `list_media` (`has_context: false` = "what haven't I looked at yet?") · `get_media` — returns the image **as an MCP image block**, so your model can actually look at it · `set_media_context` — save what you saw, so it's never analyzed twice |
 | **Agent Memory (write, Pro)** | `update_contact` (save a name/notes/tags you learned) · `set_media_context` — SocialMate **stores** what your agent learned, it never generates it |
 | **Contacts** | `list_contacts` · `get_contact` |
 | **Groups** | `list_groups` · `get_group` · `create_group` · `update_group_participants` · `set_group_subject` · `set_group_description` · `get_group_invite` · `leave_group` |
-| **Queue & batches (Pro)** | `queue_import` — for people **already waiting on you**: one `{{field}}` template + up to 5000 rows, each row becoming one *individual, personalised* message paced by anti-ban · `queue_message` (one, scheduled) · `queue_status` · `list_queue` · `cancel_queued` · `retry_queued` · `list_batches` · `cancel_batch` · `retry_batch` · `pause_queue` · `resume_queue` |
+| **Queue & batches (Pro)** | `queue_import` — for people **already waiting on you**: one `{{field}}` template + up to 5000 rows, each row becoming one *individual, personalised* message paced by anti-ban · `queue_message` (one, scheduled, at an exact ISO-8601 time with a timezone) · `cancel_queued` · `retry_queued` · `cancel_batch` · `retry_batch` · `pause_queue` · `resume_queue` |
+| **Queue status (every tier)** | `queue_status` · `list_queue` · `list_batches` — reads, so a Free agent can still see what is pending |
 | **Sync & status** | `trigger_sync` · `sync_status` · `get_antiban_status` · `get_capabilities` · `list_accounts` |
 | **Agent (Pro)** — supervise SocialMate's built-in Claude Agent | `agent_list` · `agent_get` · `agent_pause` · `agent_resume` · `agent_usage` · `agent_usage_summary` · `agent_list_approvals` · `agent_decide_approval` · `agent_list_handoffs` · `agent_take_over` · `agent_release` · `agent_reply` (a human reply, sent as you, that keeps the agent out of that chat) · `agent_send_event` (start an event job — order update, booking reminder… — for a customer from your own records) · `agent_list_knowledge` · `agent_add_knowledge` |
 
@@ -225,12 +227,12 @@ Tools honor the API key's **scope** and your **license tier**, exactly like the 
 
 | | Free | Pro |
 |---|:---:|:---:|
-| Read messages, chats, contacts, groups | ✅ | ✅ |
-| Send **text** | ✅ | ✅ |
-| Anti-ban status, capabilities | ✅ | ✅ |
-| Send **media**, create/manage groups | — | ✅ |
-| History, **Get AI Context**, poll cursor | — | ✅ |
-| Smart queue (schedule / batch / control) | — | ✅ |
+| List chats (with a last-message preview), contacts, groups, media | ✅ | ✅ |
+| Send **text**; reactions, read receipts, typing | ✅ | ✅ |
+| Anti-ban status, capabilities, sync status, queue & batch status | ✅ | ✅ |
+| Send **media**, polls, locations, contact cards; create/manage groups | — | ✅ |
+| Read messages (history, search, new-message poll), **Get AI Context**, poll results, start a history sync | — | ✅ |
+| Smart queue (schedule / batch / cancel / retry / pause) | — | ✅ |
 | Supervise SocialMate's Claude Agent (`whatsapp_agent_*`) | — | ✅ |
 
 A gated tool returns a clear *"requires Pro"* error rather than failing silently, so the agent can
@@ -241,8 +243,12 @@ adapt (e.g. fall back to a plain text send).
 Browse and call every tool interactively with the MCP Inspector:
 
 ```bash
-npx @modelcontextprotocol/inspector npx -y socialmate-mcp
+npx @modelcontextprotocol/inspector -e SOCIALMATE_API_KEY=sm_paste_your_api_key_here npx -y socialmate-mcp
 ```
+
+Swap in your real key first — the server refuses to start with the placeholder. Add
+`-e SOCIALMATE_BASE_URL=…` only if the app is not at `http://127.0.0.1:3456`. (You can also set both
+in the Inspector's **Environment Variables** panel.)
 
 Run the test suite (spawns the server against a mock REST API and drives it over MCP):
 
