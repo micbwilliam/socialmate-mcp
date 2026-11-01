@@ -210,3 +210,39 @@ test('the tool catalog covers the surfaces an agent needs', () => {
 	// Binary tools must declare themselves, or index.mjs will JSON-stringify bytes.
 	assert.equal(TOOLS.find((t) => t.name === 'whatsapp_get_media').binary, true, 'whatsapp_get_media must be declared binary');
 });
+
+/**
+ * Tier claims in tool descriptions must match the app's route gate. An LLM reads
+ * "Requires SocialMate Pro" literally: on a Free licence it refuses the call or
+ * tells the user to upgrade, so a Pro label on a Free route (the queue reads
+ * carried one for a release) silently removes a working tool.
+ *
+ * The rich sends share POST /messages with free text sends; the app gates them
+ * inside the handler by content kind (`apiWriteEnabled`), so the route is
+ * pro:false in product-facts while the tool is genuinely Pro.
+ */
+const CONTENT_GATED_PRO = {
+	whatsapp_send_media: 'Rich content on POST /messages is gated in the handler by apiWriteEnabled.',
+	whatsapp_send_poll: 'Rich content on POST /messages is gated in the handler by apiWriteEnabled.',
+	whatsapp_send_location: 'Rich content on POST /messages is gated in the handler by apiWriteEnabled.',
+	whatsapp_send_contact: 'Rich content on POST /messages is gated in the handler by apiWriteEnabled.',
+};
+const factByRoute = new Map(facts.endpoints.map((e) => [factRoute(e), e]));
+
+test('a tool says "Requires SocialMate Pro" exactly when the app gates its route', () => {
+	const wrong = [];
+	for (const tool of TOOLS) {
+		const fact = factByRoute.get(toolRoutes.get(tool.name));
+		const claimsPro = /Requires SocialMate Pro\b/.test(tool.description);
+		const proRoute = Boolean(fact?.pro) || Boolean(CONTENT_GATED_PRO[tool.name]);
+		if (claimsPro !== proRoute) wrong.push(`${tool.name} (${toolRoutes.get(tool.name)}): description ${claimsPro ? 'claims' : 'omits'} Pro, app route is ${fact?.pro ? 'Pro' : 'Free'}`);
+		if (/Available on every tier/.test(tool.description) && proRoute) wrong.push(`${tool.name}: says "every tier" but the route is Pro`);
+	}
+	assert.deepEqual(wrong, []);
+});
+
+test('content-gated Pro exceptions still point at the shared free send route', () => {
+	for (const name of Object.keys(CONTENT_GATED_PRO)) {
+		assert.equal(toolRoutes.get(name), 'POST /v1/accounts/:param/messages', `${name} no longer uses the shared send route — drop it from CONTENT_GATED_PRO`);
+	}
+});

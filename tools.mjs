@@ -88,7 +88,7 @@ export const TOOLS = [
 	{
 		name: 'whatsapp_send_message',
 		description:
-			'Sends a WhatsApp text message to one chat. Returns { sent: true, messageId, chatId, timestamp, status }. Read `status` — but know what it means: at send time it is only "pending"/"sent", i.e. the message was handed to WhatsApp, NOT that it arrived. It advances to "delivered" (it reached their phone) and then "read" (they opened it) later. So never tell anyone a message was delivered on the strength of this result. Learn the real outcome either from the `message.delivered` / `message.read` webhooks (they carry messageId + status, via the n8n Trigger or your own receiver — MCP has no inbound push), or by re-reading the row later with whatsapp_fetch_new_messages / whatsapp_search_messages, whose `status` is current. Keep the returned messageId: it is what every receipt correlates on, and what reply_to / whatsapp_react_message target. This is the primary way to reply to or notify a person or group. Set reply_to to quote a specific message. Use whatsapp_send_media for files and whatsapp_send_poll to ask a multiple-choice question. Never loop this over a list of recipients — that is the pattern that gets numbers banned; use whatsapp_queue_message to schedule one message for later, or whatsapp_queue_import when several people who are already waiting on you need the same news. If anti-ban blocks the send you get a { blocked, reason } result — back off or upgrade to Pro to auto-queue.',
+			'Sends a WhatsApp text message to one chat. Returns { sent: true, messageId, chatId, timestamp, status } when it went out immediately. Read `status` — but know what it means: at send time it is only "pending"/"sent", i.e. the message was handed to WhatsApp, NOT that it arrived. It advances to "delivered" (it reached their phone) and then "read" (they opened it) later. So never tell anyone a message was delivered on the strength of this result. Learn the real outcome either from the `message.delivered` / `message.read` webhooks (they carry messageId + status, via the n8n Trigger or your own receiver — MCP has no inbound push), or by re-reading the row later with whatsapp_fetch_new_messages / whatsapp_search_messages, whose `status` is current. Keep the returned messageId: it is what every receipt correlates on, and what reply_to / whatsapp_react_message target. This is the primary way to reply to or notify a person or group. Set reply_to to quote a specific message. Use whatsapp_send_media for files and whatsapp_send_poll to ask a multiple-choice question. Never loop this over a list of recipients — that is the pattern that gets numbers banned; use whatsapp_queue_message to schedule one message for later, or whatsapp_queue_import when several people who are already waiting on you need the same news. If anti-ban blocks the send, what happens depends on the tier. On Pro it is auto-queued and you get { queued: true, itemId, reason, retryAfterMs, priority } instead — it has NOT been sent yet, but it will go out when anti-ban allows: tell the user it is on its way (not that it was sent), do not resend it, and track it with whatsapp_list_queue / whatsapp_queue_status. On Free the call fails with a tool error naming the anti-ban reason and how long to wait — back off and retry after that, or upgrade to Pro to auto-queue.',
 		inputSchema: {
 			account_id: accountId,
 			chat_id: chatId,
@@ -613,7 +613,7 @@ export const TOOLS = [
 	{
 		name: 'whatsapp_queue_status',
 		description:
-			'Returns the smart-queue\'s live state: how many messages are pending, processing, sent and failed, and whether the queue is paused. Call to check outbound backlog before or after queueing sends. Requires SocialMate Pro.',
+			'Returns the smart-queue\'s live state: how many messages are pending, processing, sent and failed, and whether the queue is paused. Call to check outbound backlog before or after queueing sends. Available on every tier (read scope).',
 		inputSchema: {},
 		accountScoped: false,
 		build: () => ({ method: 'GET', path: '/v1/queue/status' }),
@@ -621,7 +621,7 @@ export const TOOLS = [
 	{
 		name: 'whatsapp_list_queue',
 		description:
-			'Lists queued messages, newest-relevant first, optionally filtered by account or status (pending, processing, sent, failed, cancelled). Returns queue items with their ids, target chats and scheduled times. Use to review or find an item to cancel/retry. Requires SocialMate Pro.',
+			'Lists queued messages, newest-relevant first, optionally filtered by account or status (pending, processing, sent, failed, cancelled). Returns queue items with their ids, target chats and scheduled times. Use to review or find an item to cancel/retry. Available on every tier (read scope); cancelling or retrying an item requires Pro.',
 		inputSchema: {
 			account_id: z.string().optional().describe('Restrict to one account. Omit to list across all accounts the key can use.'),
 			status: z.string().optional().describe('Filter by status: a single value or CSV (e.g. "pending,processing"). Omit for all.'),
@@ -633,7 +633,7 @@ export const TOOLS = [
 	{
 		name: 'whatsapp_list_batches',
 		description:
-			'Lists smart-queue batches (each one a set of individual, personalised messages queued together by whatsapp_queue_import) with their progress counts. Use it to track a batch through to completion. Requires SocialMate Pro.',
+			'Lists smart-queue batches (each one a set of individual, personalised messages queued together by whatsapp_queue_import) with their progress counts. Use it to track a batch through to completion. Available on every tier (read scope); cancelling or retrying a batch requires Pro.',
 		inputSchema: {
 			account_id: z.string().optional().describe('Restrict to one account. Omit for all.'),
 			status: z.enum(['active', 'completed', 'cancelled', 'paused']).optional().describe('Filter by batch status. Omit for all.'),
