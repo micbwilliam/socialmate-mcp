@@ -225,22 +225,28 @@ for (const prompt of PROMPTS) {
 
 /**
  * Non-fatal startup probe of the app's public /health route (no API key needed).
- * The local API server is OFF by default, which is the #1 reason "the tools are
- * there but every call fails" — say so once, up front, on stderr. The server keeps
- * starting either way: the app may simply be launched later, and each tool call
- * still reports its own connection error.
+ * "The tools are there but every call fails" almost always means the app's local
+ * API is not running — say so once, up front, on stderr. The server keeps starting
+ * either way: the app may simply be launched later, and each tool call still
+ * reports its own connection error.
+ *
+ * The app wraps every JSON answer in the v1.1 `{ data }` envelope, /health
+ * included. We pin the legacy bare shape with `X-SocialMate-Envelope: v1` AND
+ * unwrap `data` if it is there anyway, so neither an older nor a newer app is ever
+ * misread as "something other than SocialMate".
  */
 async function probeHealth() {
 	const url = `${BASE_URL}/health`;
 	const unreachable = (detail) =>
 		process.stderr.write(
-			`socialmate-mcp: SocialMate API not reachable at ${url} (${detail}) — open SocialMate and turn on the API server (API & Integrations), or check SOCIALMATE_BASE_URL.\n`,
+			`socialmate-mcp: SocialMate API not reachable at ${url} (${detail}) — open SocialMate and check that API & Integrations shows the local API running (creating a key turns it on), or check SOCIALMATE_BASE_URL.\n`,
 		);
 	try {
-		const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+		const res = await fetch(url, { headers: { 'X-SocialMate-Envelope': 'v1' }, signal: AbortSignal.timeout(2000) });
 		if (!res.ok) return unreachable(`HTTP ${res.status}`);
 		const body = await res.json().catch(() => null);
-		if (body?.app !== 'SocialMate') return unreachable('something other than SocialMate answered');
+		const health = body && typeof body === 'object' && body.data && typeof body.data === 'object' ? body.data : body;
+		if (health?.app !== 'SocialMate') return unreachable('something other than SocialMate answered');
 	} catch (e) {
 		unreachable(e?.name === 'TimeoutError' ? 'no answer within 2s' : e?.cause?.code || e?.message || 'network error');
 	}
@@ -249,6 +255,6 @@ async function probeHealth() {
 const transport = new StdioServerTransport();
 await server.connect(transport);
 process.stderr.write(
-	`socialmate-mcp ${VERSION}: connected to ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
+	`socialmate-mcp ${VERSION}: using ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
 );
 void probeHealth();

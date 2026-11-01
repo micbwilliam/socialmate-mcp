@@ -1,0 +1,131 @@
+{
+	"_source": "Captured from SM4 createApiServer (src/main/services/api-server.ts) via fastify inject, with no X-SocialMate-Envelope header — exactly what this MCP server receives. The v1.1 onSend hook wraps successes as { data } and errors as { error: { code, message, ...extra } }. Volatile fields (version, timestamp, retryAfterMs) are pinned. Recapture when the app changes an error shape.",
+	"health": {
+		"status": 200,
+		"body": {
+			"data": {
+				"status": "ok",
+				"app": "SocialMate",
+				"version": "3.0.0",
+				"timestamp": "2026-11-01T12:00:00.000Z",
+				"uptimeSec": 0
+			}
+		}
+	},
+	"unauthorized_missing": {
+		"status": 401,
+		"body": {
+			"error": {
+				"code": "unauthorized",
+				"message": "Missing x-api-key header"
+			}
+		}
+	},
+	"unauthorized_invalid": {
+		"status": 401,
+		"body": {
+			"error": {
+				"code": "unauthorized",
+				"message": "Invalid API key"
+			}
+		}
+	},
+	"insufficient_scope": {
+		"status": 403,
+		"body": {
+			"error": {
+				"code": "insufficient_scope",
+				"message": "Key requires 'send' scope",
+				"required": "send",
+				"have": [
+					"read"
+				]
+			}
+		}
+	},
+	"account_scope_mismatch": {
+		"status": 403,
+		"body": {
+			"error": {
+				"code": "account_scope_mismatch",
+				"message": "This key is scoped to a different account",
+				"scopedTo": [
+					"acc-other"
+				],
+				"requested": "acc-1"
+			}
+		}
+	},
+	"account_suspended_free": {
+		"status": 403,
+		"body": {
+			"error": {
+				"code": "account_suspended_free",
+				"message": "Every account this key is scoped to is suspended on Free. Upgrade to Pro to reactivate.",
+				"scopedTo": [
+					"acc-1"
+				]
+			}
+		}
+	},
+	"bulk_import_disabled": {
+		"status": 403,
+		"body": {
+			"error": {
+				"code": "bulk_import_disabled",
+				"message": "Batch sending is turned off. SocialMate is a personal messaging tool, not a broadcaster, so this is off by default. Ask the user to switch it on in the app under Settings → Advanced → Enable batch sending — every recipient must have consented. Do not work around this: send individually via POST /v1/accounts/{id}/messages, and never loop a send over a list."
+			}
+		}
+	},
+	"send_queued_pro": {
+		"status": 202,
+		"body": {
+			"data": {
+				"queued": true,
+				"itemId": "q_1",
+				"reason": "night_mode",
+				"retryAfterMs": 3600000,
+				"priority": 2
+			}
+		}
+	},
+	"send_blocked_free": {
+		"status": 429,
+		"retryAfter": "3600",
+		"body": {
+			"error": {
+				"code": "rate_limited",
+				"message": "Sending is paused during quiet hours",
+				"reason": "night_mode",
+				"retryAfterMs": 3600000,
+				"hint": "Quiet hours are active. Upgrade to Pro to auto-queue this send and deliver it when quiet hours end.",
+				"upgrade": {
+					"tier": "pro",
+					"feature": "apiSmartQueue"
+				}
+			}
+		}
+	},
+	"license_required": {
+		"status": 402,
+		"body": {
+			"error": {
+				"code": "license_required",
+				"message": "Feature 'localMessageCache' requires a Pro license",
+				"feature": "localMessageCache",
+				"tier": "pro"
+			}
+		}
+	},
+	"rate_limited_per_key": {
+		"status": 429,
+		"retryAfter": "5",
+		"body": {
+			"error": {
+				"code": "rate_limited",
+				"message": "Per-key request rate exceeded",
+				"retryAfterMs": 4200
+			}
+		}
+	}
+}

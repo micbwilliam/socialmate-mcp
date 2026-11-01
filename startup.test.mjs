@@ -80,23 +80,42 @@ for (const [label, key, expect] of [
 	});
 }
 
-test('server version comes from package.json, and a healthy app prints no warning', async () => {
-	const mock = await startHealthMock((req, res) => {
-		res.writeHead(req.url === '/health' ? 200 : 404, { 'content-type': 'application/json' });
-		res.end(JSON.stringify(req.url === '/health' ? { status: 'ok', app: 'SocialMate' } : {}));
+/** The real /health answer, captured from SM4's createApiServer (enveloped, no opt-out header). */
+const HEALTH = JSON.parse(readFileSync(new URL('./test/fixtures/sm4-api-envelopes.json', import.meta.url), 'utf8')).health;
+
+/**
+ * Two healthy servers: the real app (envelopes unless the caller pins the legacy
+ * shape with X-SocialMate-Envelope: v1, exactly like api-server.ts's onSend hook)
+ * and one that always envelopes. Before 1.3.0's fix the probe read `body.app` off
+ * the enveloped answer and warned "not reachable" on every healthy install.
+ */
+for (const [label, honoursOptOut] of [
+	['the real app (honours the envelope opt-out)', true],
+	['an app that always envelopes /health', false],
+]) {
+	test(`server version comes from package.json, and a healthy app prints no warning — ${label}`, async () => {
+		const mock = await startHealthMock((req, res) => {
+			if (req.url !== '/health') {
+				res.writeHead(404, { 'content-type': 'application/json' });
+				return res.end('{}');
+			}
+			const optedOut = req.headers['x-socialmate-envelope'] === 'v1';
+			res.writeHead(HEALTH.status, { 'content-type': 'application/json' });
+			res.end(JSON.stringify(honoursOptOut && optedOut ? HEALTH.body.data : HEALTH.body));
+		});
+		const { client, getStderr } = await connect({ SOCIALMATE_API_KEY: 'sm_test-key', SOCIALMATE_BASE_URL: mock.url });
+		try {
+			assert.equal(client.getServerVersion()?.version, PKG.version);
+			assert.ok(await waitFor(() => getStderr().includes(`using ${mock.url}`)), 'startup line printed');
+			// Give the probe time to finish, then assert it stayed quiet.
+			await new Promise((r) => setTimeout(r, 300));
+			assert.doesNotMatch(getStderr(), /not reachable/);
+		} finally {
+			await client.close();
+			await mock.close();
+		}
 	});
-	const { client, getStderr } = await connect({ SOCIALMATE_API_KEY: 'sm_test-key', SOCIALMATE_BASE_URL: mock.url });
-	try {
-		assert.equal(client.getServerVersion()?.version, PKG.version);
-		assert.ok(await waitFor(() => getStderr().includes('connected to')), 'startup line printed');
-		// Give the probe time to finish, then assert it stayed quiet.
-		await new Promise((r) => setTimeout(r, 300));
-		assert.doesNotMatch(getStderr(), /not reachable/);
-	} finally {
-		await client.close();
-		await mock.close();
-	}
-});
+}
 
 test('an unreachable API server warns on stderr but the server still starts and serves tools', async () => {
 	const url = await deadUrl();
@@ -104,7 +123,7 @@ test('an unreachable API server warns on stderr but the server still starts and 
 	try {
 		assert.ok(await waitFor(() => /not reachable/.test(getStderr())), `expected a reachability warning, got: ${getStderr()}`);
 		assert.match(getStderr(), new RegExp(`SocialMate API not reachable at ${url}/health`));
-		assert.match(getStderr(), /turn on the API server \(API & Integrations\), or check SOCIALMATE_BASE_URL/);
+		assert.match(getStderr(), /API & Integrations shows the local API running \(creating a key turns it on\), or check SOCIALMATE_BASE_URL/);
 		const { tools } = await client.listTools();
 		assert.ok(tools.length > 0, 'tools are still listed');
 	} finally {
