@@ -1,6 +1,6 @@
 {
   "_generated": "GENERATED FILE — do not edit by hand. Run `npm run gen:product-facts` after changing an anchor. Drift-guarded by src/shared/product-facts.test.ts. Map: docs/CROSS-REPO-CONTRACT.md.",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "tiers": {
     "free": {
       "maxAccounts": 1,
@@ -1035,6 +1035,10 @@
         "mode": "event"
       },
       {
+        "id": "cod_confirm",
+        "mode": "event"
+      },
+      {
         "id": "booking_reminder",
         "mode": "event"
       },
@@ -1065,6 +1069,9 @@
     ],
     "presets": [
       "shop",
+      "order_help",
+      "cod_confirm",
+      "leads",
       "clinic",
       "real_estate",
       "restaurant",
