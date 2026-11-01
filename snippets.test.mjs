@@ -87,11 +87,19 @@ test('the README documents exactly the env vars index.mjs actually reads', () =>
 });
 
 test('the README leads with the API-server prerequisite', () => {
-	// The #1 first-run failure: SocialMate's local API server is OFF by default, so a
-	// user copies a perfect config, restarts their client, and every tool call fails with
-	// a connection error that names nothing. Saying so is not optional.
+	// The #1 first-run failure: SocialMate's local API is not running, so a user copies
+	// a perfect config, restarts their client, and every tool call fails with a connection
+	// error that names nothing. Since 3.0 the API ships off but creating a key turns it on,
+	// so the README must say both how it comes on and where to check it. (A bare
+	// /off by default/ match used to pass on the unrelated "Batch sending is off by
+	// default" line, so it proved nothing once the API wording changed.)
 	const readme = read('README.md');
-	assert.match(readme, /off by default/i, 'the README no longer warns that the API server is off by default');
+	const start = readme.indexOf('## Requirements');
+	assert.ok(start >= 0, 'the README lost its Requirements section');
+	const prereqs = readme.slice(start, readme.indexOf('\n## ', start + 1));
+	assert.match(prereqs, /Creating a key[^.]*turns the local\s+API on/i, 'the README no longer says creating a key turns the local API on');
+	assert.match(prereqs, /check that \*\*API &\s+Integrations\*\* shows the API running/i, 'the README no longer says where to check the API is running');
+	assert.match(prereqs, /SocialMate API not reachable at/, 'the README no longer names the startup warning to look for');
 });
 
 test('both Claude Desktop and Claude Code have a documented path', () => {
