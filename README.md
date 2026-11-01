@@ -40,7 +40,8 @@ supervise SocialMate's built-in **Claude Agent** (Pro) —
   `SOCIALMATE_BASE_URL` at whichever you run; the tools are identical.
 - **Its local API server switched on.** ⚠️ It is **off by default** — turn it on in
   **API & Integrations**. This is the single most common reason the tools don't show up: the MCP
-  server starts fine, then has nothing to talk to.
+  server starts fine, then has nothing to talk to. On startup it checks the app's `/health` and, if
+  nothing answers, logs `SocialMate API not reachable at …` to your MCP client's server log (stderr).
 - An **API key** from the app (**API & Integrations → API Keys → new key**). Its scope
   (read / send / admin) and your license tier decide which tools work.
 - **Node.js ≥ 18.17** (only to run `npx` — there is nothing to install globally; `npx` fetches this
@@ -65,6 +66,10 @@ already filled in, under **API & Integrations → MCP**):
   }
 }
 ```
+
+The fastest way to get it is **API & Integrations → MCP → "Create key & copy config"**, which mints
+a key and copies this config with the key already filled in. If you paste the snippet as-is, the
+server refuses to start and says the key is still the placeholder.
 
 Restart Claude Desktop and the WhatsApp tools appear. **Cursor, Cline, Goose** and any other MCP
 client use the same `command` / `args` / `env` — drop it into their MCP config the same way.

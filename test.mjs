@@ -28,6 +28,7 @@ function startMock() {
 				res.writeHead(code, { 'content-type': 'application/json' });
 				res.end(JSON.stringify(obj));
 			};
+			if (req.method === 'GET' && path === '/health') return send(200, { status: 'ok', app: 'SocialMate' });
 			if (req.method === 'GET' && path === '/v1/accounts') return send(200, { data: [{ id: 'acc1', name: 'Test', state: 'connected' }] });
 			if (req.method === 'POST' && path === '/v1/accounts/acc1/messages') {
 				const body = chunks ? JSON.parse(chunks) : {};
@@ -115,7 +116,7 @@ test('socialmate-mcp end to end', async () => {
 	const transport = new StdioClientTransport({
 		command: process.execPath,
 		args: [fileURLToPath(new URL('./index.mjs', import.meta.url))],
-		env: { ...process.env, SOCIALMATE_API_KEY: 'test-key', SOCIALMATE_BASE_URL: mock.url },
+		env: { ...process.env, SOCIALMATE_API_KEY: 'sm_test-key', SOCIALMATE_BASE_URL: mock.url },
 	});
 	const client = new Client({ name: 'test-client', version: '1.0.0' });
 	await client.connect(transport);

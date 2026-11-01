@@ -41,18 +41,37 @@
  *      there is no `sk-`/`sk_` prefix and no `_live_` segment in this product. The key's
  *      scope (read / send / admin) and your license tier decide which tools actually work.
  */
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { TOOLS } from './tools.mjs';
 import { PROMPTS } from './prompts.mjs';
 
-const API_KEY = process.env.SOCIALMATE_API_KEY;
+// npm always ships package.json, so the reported server version can never drift
+// from the published one (it was a hardcoded '1.0.0' through 1.2.x).
+const { version: VERSION } = createRequire(import.meta.url)('./package.json');
+
+const API_KEY = (process.env.SOCIALMATE_API_KEY || '').trim();
 const BASE_URL = (process.env.SOCIALMATE_BASE_URL || 'http://127.0.0.1:3456').replace(/\/+$/, '');
 
+// The value every documented config snippet ships with. Pasting the snippet without
+// swapping it in is the most common first-run mistake, and the app would only answer
+// it with an opaque 401 on the first tool call.
+const PLACEHOLDER_KEY = 'sm_paste_your_api_key_here';
+const CREATE_KEY_HINT =
+	'Create a key in SocialMate → API & Integrations → MCP → "Create key & copy config", then paste that config into your MCP client.';
+
+// stdout is the MCP stdio channel — every diagnostic goes to stderr.
 if (!API_KEY) {
-	process.stderr.write(
-		'socialmate-mcp: SOCIALMATE_API_KEY is required. Create one in the SocialMate app → API & Integrations, then set it in your MCP client config.\n',
-	);
+	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is required. ${CREATE_KEY_HINT}\n`);
+	process.exit(2);
+}
+if (API_KEY === PLACEHOLDER_KEY) {
+	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is still the placeholder "${PLACEHOLDER_KEY}". ${CREATE_KEY_HINT}\n`);
+	process.exit(2);
+}
+if (!API_KEY.startsWith('sm_')) {
+	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is not a SocialMate API key (a real key starts with "sm_"). ${CREATE_KEY_HINT}\n`);
 	process.exit(2);
 }
 
@@ -172,7 +191,7 @@ function formatError(err) {
 	return fail(err.message);
 }
 
-const server = new McpServer({ name: 'socialmate', version: '1.0.0' });
+const server = new McpServer({ name: 'socialmate', version: VERSION });
 
 for (const tool of TOOLS) {
 	server.registerTool(
@@ -202,8 +221,32 @@ for (const prompt of PROMPTS) {
 	}));
 }
 
+/**
+ * Non-fatal startup probe of the app's public /health route (no API key needed).
+ * The local API server is OFF by default, which is the #1 reason "the tools are
+ * there but every call fails" — say so once, up front, on stderr. The server keeps
+ * starting either way: the app may simply be launched later, and each tool call
+ * still reports its own connection error.
+ */
+async function probeHealth() {
+	const url = `${BASE_URL}/health`;
+	const unreachable = (detail) =>
+		process.stderr.write(
+			`socialmate-mcp: SocialMate API not reachable at ${url} (${detail}) — open SocialMate and turn on the API server (API & Integrations), or check SOCIALMATE_BASE_URL.\n`,
+		);
+	try {
+		const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+		if (!res.ok) return unreachable(`HTTP ${res.status}`);
+		const body = await res.json().catch(() => null);
+		if (body?.app !== 'SocialMate') return unreachable('something other than SocialMate answered');
+	} catch (e) {
+		unreachable(e?.name === 'TimeoutError' ? 'no answer within 2s' : e?.cause?.code || e?.message || 'network error');
+	}
+}
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 process.stderr.write(
-	`socialmate-mcp: connected to ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
+	`socialmate-mcp ${VERSION}: connected to ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
 );
+void probeHealth();
