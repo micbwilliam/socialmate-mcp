@@ -151,3 +151,27 @@ test('a Pro 202 { queued } answer to whatsapp_send_message is a success the agen
 	assert.ok(!res.isError, 'queued is not an error');
 	assert.deepEqual(JSON.parse(textOf(res)), FX.send_queued_pro.body.data);
 });
+
+// ── scheduled_at: a time the app can't read must never become "send now" ─────
+
+for (const [tool, args] of [
+	['whatsapp_queue_message', { chat_id: '15551234567', content: 'Reminder' }],
+	['whatsapp_queue_import', { batch_name: 'b', template: 'Hi {{name}}', rows: [{ chat_id: '15551234567', fields: { name: 'Jane' } }] }],
+]) {
+	for (const bad of ['tomorrow 9am', 'in 2 hours', 'next Monday', '2026-07-10', '2026-07-10T14:30:00']) {
+		test(`${tool} refuses scheduled_at "${bad}" without calling the app`, async () => {
+			const res = await callWith({ status: 200, body: { data: { success: true } } }, tool, { ...args, scheduled_at: bad });
+			assert.equal(res.isError, true, 'an unreadable time is a tool error');
+			assert.match(textOf(res), /scheduled_at/);
+			assert.equal(seen.length, 0, 'nothing reached the app, so nothing was queued to send now');
+		});
+	}
+	for (const good of ['2026-07-10T14:30:00Z', '2026-07-10T16:30:00+02:00']) {
+		test(`${tool} forwards scheduled_at "${good}" as unix ms`, async () => {
+			const res = await callWith({ status: 200, body: { data: { success: true } } }, tool, { ...args, scheduled_at: good });
+			assert.ok(!res.isError, textOf(res));
+			assert.equal(seen.length, 1);
+			assert.equal(seen[0].body.scheduledAt, Date.parse(good));
+		});
+	}
+}

@@ -39,6 +39,28 @@ const targetMessageId = z
 	.string()
 	.describe('Id of the target message (from whatsapp_fetch_new_messages, whatsapp_search_messages, or a previous send result).');
 
+/**
+ * A send time. Strict ISO-8601 WITH a timezone (Z or ±hh:mm): `Date.parse` reads
+ * "tomorrow 9am" / "next Monday" as NaN, and a dropped scheduledAt means "send as
+ * soon as anti-ban allows" — so a time the app can't read must be a tool error,
+ * never a message that goes out now. A zone-less time is refused too: whose 9am?
+ */
+const SCHEDULED_AT_HINT =
+	'scheduled_at must be an ISO-8601 date-time with a timezone, e.g. 2026-07-10T14:30:00Z or 2026-07-10T16:30:00+02:00 — work out the exact time first; phrases like "tomorrow 9am" are not accepted.';
+const scheduledAt = (what, omit) =>
+	z
+		.string()
+		.datetime({ offset: true, message: SCHEDULED_AT_HINT })
+		.optional()
+		.describe(`ISO-8601 date-time with a timezone to ${what} (e.g. 2026-07-10T14:30:00Z or 2026-07-10T16:30:00+02:00). ${omit} Natural-language times ("tomorrow 9am") are rejected — resolve them to an exact time first.`);
+
+/** scheduled_at → unix ms. The schema already refused anything else; this is the backstop. */
+function toUnixMs(iso) {
+	const ms = Date.parse(iso);
+	if (!Number.isFinite(ms)) throw new Error(SCHEDULED_AT_HINT);
+	return ms;
+}
+
 const agentIdArg = z.string().describe('The id of one of SocialMate\'s own WhatsApp agents (from whatsapp_agent_list).');
 
 const agentChatId = z
@@ -452,13 +474,13 @@ export const TOOLS = [
 			account_id: accountId,
 			chat_id: chatId,
 			content: z.string().min(1).max(4096).describe('The message text to queue.'),
-			scheduled_at: z.string().optional().describe('ISO-8601 date-time to send at (e.g. 2026-07-10T14:30:00Z). Omit to send as soon as anti-ban allows.'),
+			scheduled_at: scheduledAt('send at', 'Omit to send as soon as anti-ban allows.'),
 		},
 		accountScoped: true,
 		build: (a) => ({
 			method: 'POST',
 			path: `/v1/accounts/${a._account}/queue/items`,
-			body: { chatId: a.chat_id, content: a.content, ...(a.scheduled_at ? { scheduledAt: Date.parse(a.scheduled_at) || undefined } : {}) },
+			body: { chatId: a.chat_id, content: a.content, ...(a.scheduled_at ? { scheduledAt: toUnixMs(a.scheduled_at) } : {}) },
 		}),
 	},
 	{
@@ -484,7 +506,7 @@ export const TOOLS = [
 				.min(1)
 				.max(5000)
 				.describe('The recipients, 1–5000. Each row supplies its own placeholder values.'),
-			scheduled_at: z.string().optional().describe('ISO-8601 date-time to start the batch (e.g. 2026-07-10T14:30:00Z). Anti-ban still paces it. Omit to start as soon as allowed.'),
+			scheduled_at: scheduledAt('start the batch at', 'Anti-ban still paces it. Omit to start as soon as allowed.'),
 			priority: z.number().int().min(0).max(3).optional().describe('Queue priority, 0 (lowest) to 3 (highest). Defaults to 2.'),
 			max_retries: z.number().int().min(0).max(10).optional().describe('Retries per item before it is marked failed. Defaults to 3.'),
 		},
@@ -500,7 +522,7 @@ export const TOOLS = [
 					...(r.display_name ? { displayName: r.display_name } : {}),
 					...(r.fields ? { fields: r.fields } : {}),
 				})),
-				...(a.scheduled_at ? { scheduledAt: Date.parse(a.scheduled_at) || undefined } : {}),
+				...(a.scheduled_at ? { scheduledAt: toUnixMs(a.scheduled_at) } : {}),
 				...(a.priority !== undefined ? { priority: a.priority } : {}),
 				...(a.max_retries !== undefined ? { maxRetries: a.max_retries } : {}),
 			},

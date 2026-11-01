@@ -123,8 +123,12 @@ function sample(schema) {
 			return Object.fromEntries(Object.entries(def.shape()).map(([k, v]) => [k, sample(v)]));
 		case 'ZodRecord':
 			return {};
+		case 'ZodString':
+			// A date-time field never lands in a path, and build() rejects a non-date.
+			if (def.checks?.some((c) => c.kind === 'datetime')) return '2026-07-10T14:30:00Z';
+			return PARAM;
 		default:
-			return PARAM; // ZodString and anything else that lands in a path.
+			return PARAM; // anything else that lands in a path.
 	}
 }
 
