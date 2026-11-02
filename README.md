@@ -98,7 +98,7 @@ it tries.
 | Variable | Required | Default | What it is |
 |---|:---:|---|---|
 | `SOCIALMATE_API_KEY` | ✅ | — | An API key from the app → API & Integrations. |
-| `SOCIALMATE_BASE_URL` | | `http://127.0.0.1:3456` | The app's API — a desktop app or a headless VPS. Use your **Pro named tunnel** host to drive WhatsApp from a remote agent. On a VPS (a datacenter IP) you can route an account through your own residential/mobile proxy (Pro) to keep a residential IP. |
+| `SOCIALMATE_BASE_URL` | | `http://127.0.0.1:3456` | The app's API — a desktop app or a headless VPS. For an agent on another machine: a **headless server (3.0+)** uses its **public address** — the one the console puts in "Create key & copy config" when you pick **Public address** (no tunnel or Pro needed); the **desktop app** listens only on this computer, so use its tunnel — the free tunnel works but its address changes when the app restarts, the **Pro named tunnel** keeps a fixed one. On a VPS (a datacenter IP) you can route an account through your own residential/mobile proxy (Pro) to keep a residential IP. |
 
 ## What your agent can do — 59 tools
 
