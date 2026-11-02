@@ -157,16 +157,43 @@ async function callBinary(method, path, { qs } = {}) {
 
 // Account-scope resolution, mirroring the n8n node: a single-account key
 // auto-selects; a multi-account key must be told which account.
+//
+// Only a NON-empty list is cached. Before a number is linked the list is empty,
+// and caching that would keep every account-bound tool failing until the MCP
+// client restarted the server — long after the user had linked one.
 let accountsCache = null;
 async function resolveAccount(explicit) {
 	if (explicit) return explicit;
-	if (!accountsCache) accountsCache = await call('GET', '/v1/accounts');
-	const list = Array.isArray(accountsCache) ? accountsCache : [];
-	if (list.length === 1) return list[0].id;
-	if (list.length === 0) throw new ApiError(404, { error: { message: 'This API key has no accounts in scope. Connect a WhatsApp account in the SocialMate app first.' } });
+	const list = accountsCache ?? (await call('GET', '/v1/accounts'));
+	const accounts = Array.isArray(list) ? list : [];
+	if (accounts.length > 0) accountsCache = accounts;
+	if (accounts.length === 1) return accounts[0].id;
+	if (accounts.length === 0) throw new ApiError(404, { error: { code: 'no_accounts', message: await noAccountsMessage() } });
 	throw new ApiError(400, {
-		error: { message: `This API key can use ${list.length} accounts, so account_id is required. Call whatsapp_list_accounts to see ids: ${list.map((a) => a.id).join(', ')}.` },
+		error: { message: `This API key can use ${accounts.length} accounts, so account_id is required. Call whatsapp_list_accounts to see ids: ${accounts.map((a) => a.id).join(', ')}.` },
 	});
+}
+
+/**
+ * Why the key sees no accounts. An all-accounts key (`keyScope: null` from
+ * /v1/capabilities) sees none only because no number is linked yet; a key limited
+ * to specific numbers sees none because those numbers were removed. The fixes
+ * differ, so say which — and fall back to naming both if the handshake fails.
+ */
+async function noAccountsMessage() {
+	let keyScope;
+	try {
+		keyScope = (await call('GET', '/v1/capabilities'))?.keyScope;
+	} catch {
+		keyScope = undefined;
+	}
+	if (keyScope === null) {
+		return 'No WhatsApp number is linked to SocialMate yet — link one in the SocialMate app or its admin console (Accounts → Add account), then retry.';
+	}
+	if (Array.isArray(keyScope)) {
+		return 'This API key is limited to specific WhatsApp numbers, and none of them is linked to SocialMate any more. Re-link the number, or create a key that covers a linked number in SocialMate → API & Integrations.';
+	}
+	return 'This API key has no WhatsApp number in scope. Either no number is linked to SocialMate yet (link one in the app or its admin console: Accounts → Add account), or the key is limited to numbers that were removed (create a new key in API & Integrations).';
 }
 
 function ok(data) {
@@ -222,6 +249,11 @@ function formatError(err) {
 			return fail(serverMessage || 'Batch sending is switched off. The user must enable it in the app under Settings → Advanced → "Enable batch sending". Do not fall back to sending the messages one by one.');
 		}
 		return fail(serverMessage || 'SocialMate refused this request (403).');
+	}
+	if (status === 404 && /^account not found/i.test(serverMessage)) {
+		// An account_id that names no account on this SocialMate (mistyped, removed,
+		// or from another install). Point at the tool that lists the real ones.
+		return fail('Account not found — that account_id is not a WhatsApp number linked to this SocialMate. Call whatsapp_list_accounts for valid ids.');
 	}
 	if (status === 409) {
 		// Most 409s are "account not connected", but the agent routes use 409 for
