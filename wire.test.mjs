@@ -35,6 +35,11 @@ before(async () => {
 			}
 			seen.push({ method: req.method, path, body: chunks ? JSON.parse(chunks) : null });
 			const fx = next ?? { status: 404, body: { error: { code: 'not_found', message: 'no fixture set' } } };
+			if (typeof fx.raw === 'string') {
+				// A non-SocialMate answer (Cloudflare 530 HTML, another program's page).
+				res.writeHead(fx.status, { 'content-type': 'text/html' });
+				return res.end(fx.raw);
+			}
 			res.writeHead(fx.status, { 'content-type': 'application/json', ...(fx.retryAfter ? { 'retry-after': fx.retryAfter } : {}) });
 			res.end(JSON.stringify(fx.body));
 		});
@@ -122,6 +127,57 @@ test('402 names the Pro feature', async () => {
 	const res = await callWith(FX.license_required, 'whatsapp_search_messages', {});
 	assert.equal(res.isError, true);
 	assert.match(textOf(res), /requires SocialMate Pro \(feature: localMessageCache\)/);
+});
+
+test('402 also carries the server’s message when it says more than the feature key', async () => {
+	const fx = { status: 402, body: { error: { code: 'license_required', message: 'These webhook events require Pro: message.delivered', feature: 'webhookMaxEndpoints', tier: 'pro' } } };
+	const res = await callWith(fx, 'whatsapp_list_chats', {});
+	assert.equal(textOf(res), 'This requires SocialMate Pro (feature: webhookMaxEndpoints). These webhook events require Pro: message.delivered. Upgrade in the app, or use a Free-tier tool.');
+});
+
+test('402 with only the generic message does not repeat it', async () => {
+	const res = await callWith(FX.license_required, 'whatsapp_search_messages', {});
+	assert.equal(textOf(res), 'This requires SocialMate Pro (feature: localMessageCache). Upgrade in the app, or use a Free-tier tool.');
+});
+
+test('409 "Account is not connected" says to click Connect in Accounts, not to re-link', async () => {
+	const fx = { status: 409, body: { error: { code: 'conflict', message: 'Account is not connected' } } };
+	const res = await callWith(fx, 'whatsapp_list_chats', {});
+	assert.equal(res.isError, true);
+	assert.equal(textOf(res), "That WhatsApp account isn't connected. Open SocialMate → Accounts and click Connect (on Free, accounts need reconnecting after each app restart).");
+});
+
+for (const [label, fx] of [
+	['a Cloudflare 530 HTML page', { status: 530, raw: '<!DOCTYPE html><html><body>error code: 1033</body></html>' }],
+	['a 502 with no body', { status: 502, raw: '' }],
+	['another program’s 404 HTML', { status: 404, raw: '<html>Not Found</html>' }],
+	// Not "key revoked" / "rate limited": these are Cloudflare Access and Cloudflare 1015 pages.
+	['a Cloudflare Access 401 login page', { status: 401, raw: '<!DOCTYPE html><html><title>Sign in ・ Cloudflare Access</title></html>' }],
+	['a WAF 403 page', { status: 403, raw: '<html>Attention Required! | Cloudflare</html>' }],
+	['a Cloudflare 1015 HTML 429', { status: 429, raw: '<html>error code: 1015 You are being rate limited</html>' }],
+]) {
+	test(`${label} names the base URL and what to check, not a bare HTTP status`, async () => {
+		const res = await callWith(fx, 'whatsapp_list_chats', {});
+		assert.equal(res.isError, true);
+		assert.match(textOf(res), new RegExp(`^SocialMate did not answer at http://127\\.0\\.0\\.1:\\d+ \\(HTTP ${fx.status}`));
+		assert.match(textOf(res), /running with its API on/);
+		assert.match(textOf(res), /something other than SocialMate answered/);
+		assert.match(textOf(res), /trycloudflare\.com address, it changed when the app restarted — copy a fresh config from API & Integrations → MCP/);
+		assert.doesNotMatch(textOf(res), /rejected the API key|Rate limited|anti-ban|missing the/);
+	});
+}
+
+test('a 2xx HTML page on the binary thumbnail route is not handed to the vision model as an image', async () => {
+	const res = await callWith({ status: 200, raw: '<html>n8n</html>' }, 'whatsapp_get_media', { media_id: 'm1' });
+	assert.equal(res.isError, true);
+	assert.equal(res.content[0].type, 'text');
+	assert.match(textOf(res), /^Something other than the SocialMate API answered at http:\/\/127\.0\.0\.1:\d+ \(HTTP 200, text\/html instead of an image\)/);
+});
+
+test('a 2xx HTML page is reported as "not the SocialMate API", never handed to the agent as data', async () => {
+	const res = await callWith({ status: 200, raw: '<html>n8n</html>' }, 'whatsapp_list_chats', {});
+	assert.equal(res.isError, true);
+	assert.match(textOf(res), /^Something other than the SocialMate API answered at http:\/\/127\.0\.0\.1:\d+ \(HTTP 200, not JSON\)/);
 });
 
 test('per-key 429 surfaces how long to wait', async () => {

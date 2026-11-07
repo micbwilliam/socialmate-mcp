@@ -64,18 +64,33 @@ const PLACEHOLDER_KEYS = new Set(['sm_paste_your_api_key_here', 'sm_xxx']);
 const CREATE_KEY_HINT =
 	'Create a key in SocialMate → API & Integrations → MCP → "Create key & copy config", then paste that config into your MCP client.';
 
-// stdout is the MCP stdio channel — every diagnostic goes to stderr.
-if (!API_KEY) {
-	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is required. ${CREATE_KEY_HINT}\n`);
-	process.exit(2);
+/**
+ * A bad key is a config error the user must SEE. Exiting at startup hid it: MCP
+ * clients show a dead server ("failed" / "disconnected") and bury stderr in a log
+ * file. So the server starts anyway, lists its tools, and answers EVERY tool call
+ * with this message — which the client shows in the chat. It is also written to
+ * stderr once, and no request is ever sent to the app with the bad key.
+ */
+const CONFIG_ERROR = !API_KEY
+	? `SOCIALMATE_API_KEY is required. ${CREATE_KEY_HINT}`
+	: PLACEHOLDER_KEYS.has(API_KEY)
+		? `SOCIALMATE_API_KEY is still the placeholder "${API_KEY}". ${CREATE_KEY_HINT}`
+		: !API_KEY.startsWith('sm_')
+			? `SOCIALMATE_API_KEY is not a SocialMate API key (a real key starts with "sm_"). ${CREATE_KEY_HINT}`
+			: null;
+
+/** The fix for "something other than SocialMate answered", named the same way on every path. */
+function notSocialMateHint() {
+	return /(^|\.)trycloudflare\.com$/i.test(safeHost(BASE_URL))
+		? `${BASE_URL} is a quick-tunnel address, and those change every time SocialMate starts — copy a fresh config from SocialMate → API & Integrations → MCP (or use a named tunnel, Pro, for a fixed address).`
+		: 'Is the SocialMate app running with its API on (API & Integrations)? Is SOCIALMATE_BASE_URL right? If it is a trycloudflare.com address, it changed when the app restarted — copy a fresh config from API & Integrations → MCP.';
 }
-if (PLACEHOLDER_KEYS.has(API_KEY)) {
-	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is still the placeholder "${API_KEY}". ${CREATE_KEY_HINT}\n`);
-	process.exit(2);
-}
-if (!API_KEY.startsWith('sm_')) {
-	process.stderr.write(`socialmate-mcp: SOCIALMATE_API_KEY is not a SocialMate API key (a real key starts with "sm_"). ${CREATE_KEY_HINT}\n`);
-	process.exit(2);
+function safeHost(url) {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return '';
+	}
 }
 
 /** Call the SocialMate REST API and unwrap the { data } envelope. Throws an ApiError on non-2xx. */
@@ -116,7 +131,8 @@ async function request(method, path, { body, qs } = {}) {
 			body: body ? JSON.stringify(body) : undefined,
 		});
 	} catch (e) {
-		throw new ApiError(0, { error: { message: `Cannot reach the SocialMate server at ${BASE_URL}. Is the app running with its local API on (API & Integrations)? (${e.message})` } });
+		const quick = /(^|\.)trycloudflare\.com$/i.test(safeHost(BASE_URL)) ? ` ${notSocialMateHint()}` : '';
+		throw new ApiError(0, { error: { message: `Cannot reach the SocialMate server at ${BASE_URL}. Is the app running with its local API on (API & Integrations)? (${e.message})${quick}` } });
 	}
 }
 
@@ -135,6 +151,12 @@ async function call(method, path, { body, qs } = {}) {
 	const res = await request(method, path, { body, qs });
 	const parsed = await errorBody(res);
 	if (!res.ok) throw apiErrorFrom(res, parsed);
+	// Every SocialMate JSON route answers JSON. A 2xx HTML page is another program
+	// on that address (the /admin console, n8n, a captive portal) — never hand an
+	// agent that page as if it were data.
+	if (parsed && typeof parsed === 'object' && 'raw' in parsed && Object.keys(parsed).length === 1) {
+		throw new ApiError(res.status, { error: { message: `Something other than the SocialMate API answered at ${BASE_URL} (HTTP ${res.status}, not JSON). ${notSocialMateHint()}` } });
+	}
 	// Unwrap `{ data }` — but ONLY when `data` is the whole envelope. The paginated
 	// routes answer `{ data, pagination }`, and unwrapping those would throw the
 	// pagination away, leaving an agent unable to tell that there is a next page.
@@ -150,8 +172,13 @@ async function call(method, path, { body, qs } = {}) {
 async function callBinary(method, path, { qs } = {}) {
 	const res = await request(method, path, { qs });
 	if (!res.ok) throw apiErrorFrom(res, await errorBody(res));
-	// The only binary route we expose is the thumbnail, which is always JPEG.
-	const mimeType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+	// The only binary route we expose is the thumbnail, which the app always sends
+	// as image/jpeg. Anything else (an HTML page from a proxy, n8n or the /admin
+	// console) is not SocialMate — never hand it to a vision model as an image.
+	const mimeType = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+	if (!mimeType.startsWith('image/')) {
+		throw new ApiError(res.status, { error: { message: `Something other than the SocialMate API answered at ${BASE_URL} (HTTP ${res.status}, ${mimeType || 'no content type'} instead of an image). ${notSocialMateHint()}` } });
+	}
 	return { data: Buffer.from(await res.arrayBuffer()).toString('base64'), mimeType };
 }
 
@@ -235,12 +262,30 @@ function formatError(err) {
 	if (!(err instanceof ApiError)) return fail(`Unexpected error: ${err.message}`);
 	const { status, inner } = err;
 	const serverMessage = typeof inner.message === 'string' && inner.message ? inner.message : '';
+	// SocialMate answers every HTTP error as JSON with a message. A non-JSON or
+	// empty body came from something else — a Cloudflare 530 / error 1033 page for
+	// a quick tunnel whose address changed, Cloudflare Access's 401 login page, a
+	// WAF 403, a Cloudflare 1015 429, a proxy's 502, another program's 404. Decide
+	// that BEFORE the status branches, or a foreign 401 reads as "key revoked" and
+	// a foreign 429 as an anti-ban limit.
+	const body = err.body && typeof err.body === 'object' ? err.body : {};
+	const notJson = 'raw' in body;
+	if (status > 0 && (notJson || Object.keys(body).length === 0)) {
+		return fail(`SocialMate did not answer at ${BASE_URL} (HTTP ${status}${notJson ? ', not JSON' : ''}) — something other than SocialMate answered. ${notSocialMateHint()}`);
+	}
 	if (status === 401) {
 		// The key reached the app and was refused: revoked, rotated, deleted, or
 		// mistyped. Recreating it is the only fix, so say where.
 		return fail(`SocialMate rejected the API key (${serverMessage || 'unauthorized'}) — it was revoked, rotated or mistyped. ${CREATE_KEY_HINT}`);
 	}
-	if (status === 402) return fail(`This requires SocialMate Pro (feature: ${inner.feature || 'unknown'}). Upgrade in the app, or use a Free-tier tool.`);
+	if (status === 402) {
+		// Say WHAT needs Pro: the server's message names it ("These webhook events
+		// require Pro: message.delivered"); the feature key alone can mislead. Skip
+		// it only when it is the generic line that just repeats the feature key.
+		const feature = inner.feature || 'unknown';
+		const extra = serverMessage && serverMessage !== `Feature '${feature}' requires a Pro license` ? ` ${serverMessage.replace(/\.?$/, '.')}` : '';
+		return fail(`This requires SocialMate Pro (feature: ${feature}).${extra} Upgrade in the app, or use a Free-tier tool.`);
+	}
 	if (status === 403) {
 		// Branch on the app's stable machine code. Only `insufficient_scope` is a
 		// key-scope problem; every other 403 (batch sending off, a key scoped to a
@@ -265,7 +310,9 @@ function formatError(err) {
 		// their own conflicts ("Already approved.", "Choose an AI provider…") —
 		// pass those through instead of misreporting them as a dead connection.
 		if (serverMessage && !/not connected/i.test(serverMessage)) return fail(serverMessage);
-		return fail('That WhatsApp account is not connected. Link it in the SocialMate app first.');
+		// The account exists (an unknown id is a 404, handled above) — it is linked
+		// but offline. No re-pairing or QR is needed, just a reconnect.
+		return fail("That WhatsApp account isn't connected. Open SocialMate → Accounts and click Connect (on Free, accounts need reconnecting after each app restart).");
 	}
 	if (status === 429) {
 		const wait = retryAfterText(err);
@@ -288,6 +335,10 @@ function formatError(err) {
 		}
 		return fail(`Rate limited (${serverMessage || 'too many requests'}) — ${wait ? `retry after ${wait}` : 'slow down and retry in a moment'}.`);
 	}
+	if (!serverMessage && status > 0) {
+		// JSON, but with no message SocialMate would have sent.
+		return fail(`SocialMate did not answer at ${BASE_URL} (HTTP ${status}) — something other than SocialMate answered. ${notSocialMateHint()}`);
+	}
 	return fail(err.message);
 }
 
@@ -298,6 +349,7 @@ for (const tool of TOOLS) {
 		tool.name,
 		{ description: tool.description, inputSchema: tool.inputSchema },
 		async (args) => {
+			if (CONFIG_ERROR) return fail(`socialmate-mcp is not configured: ${CONFIG_ERROR}`);
 			try {
 				const a = { ...args };
 				if (tool.accountScoped) a._account = await resolveAccount(args.account_id);
@@ -358,7 +410,12 @@ async function probeHealth() {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-process.stderr.write(
-	`socialmate-mcp ${VERSION}: using ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
-);
-void probeHealth();
+// stdout is the MCP stdio channel — every diagnostic goes to stderr.
+if (CONFIG_ERROR) {
+	process.stderr.write(`socialmate-mcp ${VERSION}: ${CONFIG_ERROR} Every tool call answers with this message until it is fixed.\n`);
+} else {
+	process.stderr.write(
+		`socialmate-mcp ${VERSION}: using ${BASE_URL} with ${TOOLS.length} tools and ${PROMPTS.length} prompt(s).\n`,
+	);
+	void probeHealth();
+}

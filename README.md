@@ -70,7 +70,8 @@ already filled in, under **API & Integrations → MCP**):
 
 The fastest way to get it is **API & Integrations → MCP → "Create key & copy config"**, which mints
 a key and copies this config with the key already filled in. If you paste the snippet as-is, the
-server refuses to start and says the key is still the placeholder.
+server still starts, but every tool call answers that the key is still the placeholder and where
+to create a real one — so you see it right in the chat.
 
 Restart Claude Desktop and the WhatsApp tools appear. **Cursor, Cline, Goose** and any other MCP
 client use the same `command` / `args` / `env` — drop it into their MCP config the same way.
@@ -195,7 +196,10 @@ ask it to. Two ways to make an agent react to messages *as they arrive*:
    you've seen as `since` to get only what's new. Requires Pro (it reads synced history).
 2. **Event-driven (bridge)** — start the loop from n8n's **SocialMate Trigger** (`message.received`)
    or a **webhook** to your own code, then let the agent act back through these tools. Works on Free
-   too (the `message.received` webhook is a Free event).
+   too (the `message.received` webhook is a Free event) — within Free's webhook quota: 2 endpoints,
+   with deliveries counted **per endpoint** against **100 per UTC day**. A `message.received` /
+   `message.sent` event is dropped when delivering it would push the day's count past 100 (with 2
+   endpoints, an event needs 2 free deliveries); the count resets at 00:00 UTC. Pro has no daily cap.
 
 For a desktop assistant you drive by hand, MCP alone is perfect. For an unattended auto-responder,
 use the bridge.

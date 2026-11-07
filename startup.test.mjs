@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,26 +7,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 /**
- * Startup behaviour (before any tool call): a bad API key is refused with a
- * pointer to where a real one comes from, the reported server version tracks
+ * Startup behaviour: a bad API key is reported on every tool call (and stderr)
+ * with a pointer to where a real one comes from, the reported server version tracks
  * package.json, and the /health probe warns — on stderr only, never fatally —
  * when the app's API server is not reachable.
  */
 
 const ENTRY = fileURLToPath(new URL('./index.mjs', import.meta.url));
 const PKG = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-
-/** Run the server to exit with no client attached; resolves { code, stdout, stderr }. */
-function runToExit(env) {
-	return new Promise((resolve) => {
-		const child = spawn(process.execPath, [ENTRY], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
-		let stdout = '';
-		let stderr = '';
-		child.stdout.on('data', (c) => (stdout += c));
-		child.stderr.on('data', (c) => (stderr += c));
-		child.on('exit', (code) => resolve({ code, stdout, stderr }));
-	});
-}
 
 function startHealthMock(handler) {
 	const server = createServer(handler);
@@ -71,12 +58,32 @@ for (const [label, key, expect] of [
 	['the website one-liner placeholder', 'sm_xxx', /still the placeholder "sm_xxx"/],
 	['not sm_-prefixed', 'sk-live-123', /starts with "sm_"/],
 ]) {
-	test(`a ${label} API key exits 2 with a create-key hint on stderr and nothing on stdout`, async () => {
-		const { code, stdout, stderr } = await runToExit({ SOCIALMATE_API_KEY: key, SOCIALMATE_BASE_URL: 'http://127.0.0.1:9' });
-		assert.equal(code, 2);
-		assert.equal(stdout, '', 'stdout is the MCP channel and must stay clean');
-		assert.match(stderr, expect);
-		assert.match(stderr, /API & Integrations → MCP → "Create key & copy config"/);
+	// Exiting hid the reason: clients show a dead server and bury stderr in a log.
+	// The server now starts, lists its tools and answers every call with the fix.
+	test(`a ${label} API key still starts, and every tool call answers with the create-key hint (no request sent)`, async () => {
+		let hits = 0;
+		const mock = await startHealthMock((_req, res) => {
+			hits += 1;
+			res.writeHead(500);
+			res.end();
+		});
+		const { client, getStderr } = await connect({ SOCIALMATE_API_KEY: key, SOCIALMATE_BASE_URL: mock.url });
+		try {
+			const { tools } = await client.listTools();
+			assert.ok(tools.length > 0, 'tools are still listed');
+			const res = await client.callTool({ name: 'whatsapp_list_accounts', arguments: {} });
+			assert.equal(res.isError, true);
+			const text = res.content[0].text;
+			assert.match(text, /^socialmate-mcp is not configured: /);
+			assert.match(text, expect);
+			assert.match(text, /API & Integrations → MCP → "Create key & copy config"/);
+			assert.ok(await waitFor(() => expect.test(getStderr())), `stderr names the problem too: ${getStderr()}`);
+			await new Promise((r) => setTimeout(r, 200));
+			assert.equal(hits, 0, 'a bad key is never sent to the app (no /health probe, no API call)');
+		} finally {
+			await client.close();
+			await mock.close();
+		}
 	});
 }
 
