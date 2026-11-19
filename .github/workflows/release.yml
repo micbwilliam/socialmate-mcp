@@ -9,7 +9,9 @@ name: Release
 #   npm run release:patch   # or release:minor / release:major
 # (bumps package.json, commits, creates vX.Y.Z, pushes commit + tag)
 #
-# One-time setup: an npm Automation token in the NPM_TOKEN repo secret.
+# Auth: npm trusted publishing (OIDC), so there is no token to rotate. One-time
+# setup on npmjs.com: package → Settings → Trusted Publisher → GitHub Actions,
+# repo micbwilliam/socialmate-mcp, workflow release.yml.
 
 on:
   push:
@@ -17,7 +19,7 @@ on:
 
 permissions:
   contents: write # create the GitHub Release
-  id-token: write # npm provenance via OIDC
+  id-token: write # npm trusted publishing + provenance via OIDC
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -35,6 +37,8 @@ jobs:
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 bundles npm 10.
+      - run: npm install -g npm@^11.5.1
       - run: npm ci
       - run: npm test # gate the publish on the unit + packaging + contract-drift suite
       # Pin package.json to the pushed tag (vX.Y.Z -> X.Y.Z). The tag is the
@@ -43,8 +47,6 @@ jobs:
       - name: Set version from tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
